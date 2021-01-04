@@ -106,7 +106,7 @@ function init!(igashell::IGAShell, dh::JuAFEM.AbstractDofHandler)
     _init_vtk_grid!(dh, igashell)
 end
 
-struct IGAShellState{MS1<:AbstractMaterialState,MS2<:AbstractMaterialState} <: AbstractPartState
+struct IGAShellState{MS1<:Five.AbstractMaterialState,MS2<:Five.AbstractMaterialState} <: Five.AbstractPartState
     materialstates::Array{MS1,2} #layer, qp
     interfacestates::Array{MS2,2} #interface, qp}
 end
@@ -433,7 +433,7 @@ function assemble_dissipation!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell
 end
 
 
-function assemble_stiffnessmatrix_and_forcevector!(( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)) 
+function assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables) 
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_STIFFMAT)
 end
 
@@ -821,9 +821,9 @@ end
 
 function integrate_cohesive_forcevector_and_stiffnessmatrix!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
-    material::AbstractMaterial, ξ::T,
-    materialstate::AbstractArray{<:AbstractMaterialState}, 
-    new_materialstate::AbstractArray{<:AbstractMaterialState}, 
+    material::Five.AbstractMaterial, ξ::T,
+    materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
+    new_materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ke::AbstractMatrix, 
     fe::AbstractVector, 
     ue::AbstractVector,
@@ -894,9 +894,9 @@ end
 
 function integrate_cohesive_fstar!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
-    material::AbstractMaterial, ξ::T,
-    materialstate::AbstractArray{<:AbstractMaterialState}, 
-    new_materialstate::AbstractArray{<:AbstractMaterialState}, 
+    material::Five.AbstractMaterial, ξ::T,
+    materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
+    new_materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ke::AbstractMatrix, 
     fe::AbstractVector, 
     ue::AbstractVector,
@@ -959,9 +959,9 @@ end
 
 function integrate_dissipation!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
-    material::AbstractMaterial, ξ::T,
-    materialstate::AbstractArray{<:AbstractMaterialState}, 
-    new_materialstate::AbstractArray{<:AbstractMaterialState}, 
+    material::Five.AbstractMaterial, ξ::T,
+    materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
+    new_materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ge::Base.RefValue, 
     fe::AbstractVector, 
     ue::AbstractVector,

@@ -1,7 +1,7 @@
 #
 #
 #
-struct IGAShellExternalForce{P<:IGAShell} <: AbstractExternalForce
+struct IGAShellExternalForce{P<:IGAShell} <: Five.AbstractExternalForce
     faceset::GeometryObjectVectors
     traction::Function
     igashell::Base.RefValue{P}

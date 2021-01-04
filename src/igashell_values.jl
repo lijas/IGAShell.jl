@@ -414,7 +414,7 @@ function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords
 
 end
 
-function JuAFEM.reinit_midsurface!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
+function reinit_midsurface!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
 
     qp = 0
     for iqp in 1:getnquadpoints_inplane(cv)

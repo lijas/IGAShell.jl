@@ -74,7 +74,7 @@ end
 
 function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T}, 
                            recovory_stress_data::AbstractVector{<:RecoveredStresses}, 
-                           constitutive_stress_data::AbstractMatrix{<:AbstractMaterialState}, 
+                           constitutive_stress_data::AbstractMatrix{<:Five.AbstractMaterialState}, 
                            cellstate::CELLSTATE) where {dim_p, dim_s, T}
 
     is_fully_discontiniuos(cellstate) && return false, nothing
@@ -122,7 +122,7 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
     return cell_upgraded, new_cellstate
 end
 
-function _get_interface_stress_layered(materialstates::AbstractMatrix{<:AbstractMaterialState}, iint, nqp_oop_per_layer, nqpinplane, dim_p)
+function _get_interface_stress_layered(materialstates::AbstractMatrix{<:Five.AbstractMaterialState}, iint, nqp_oop_per_layer, nqpinplane, dim_p)
 
     #Avrage stress beween layers
     idx1 = stress_interface_index(nqp_oop_per_layer, nqpinplane, dim_p)

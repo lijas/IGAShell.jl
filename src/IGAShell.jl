@@ -1,9 +1,11 @@
-module IGAShell
+module IgAShell
 
 export VertexInterfaceIndex, EdgeInterfaceIndex
 
 using Five
 using IGA
+using StaticArrays
+using TimerOutputs
 
 """
 EdgeInterfaceIndex
@@ -43,6 +45,8 @@ GeometryObjectVectors
 const GeometryObjectVectors = Union{Array{Int,1}, Array{EdgeIndex,1}, Array{FaceIndex,1}, Array{VertexIndex,1}, Array{EdgeInterfaceIndex,1}, Array{VertexInterfaceIndex,1}}
 const GeometryObject = Union{Int, EdgeIndex, FaceIndex, VertexIndex, EdgeInterfaceIndex, VertexInterfaceIndex}
 
+include("higherorderlagrange.jl") #TODO: Move to sperate package instead
+
 include("igashell_values.jl") 
 include("igashell_data.jl")
 
@@ -69,7 +73,7 @@ include("igashell_main.jl")
 include("igashell_vtk.jl")
 include("igashell_upgrade.jl")
 include("igashell_external_force.jl")
-include("igashell_material.jl")
+#include("igashell_material.jl")
 include("igashell_weakbc.jl")
 include("igashell_utils.jl")
 include("igashell_autodiff.jl")

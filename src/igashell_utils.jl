@@ -19,7 +19,7 @@ end
 IGAShellStressOutput
     Output of stresses at specific elements
 """
-struct IGAShellStressOutput{P<:IGAShell,T} <: StateOutput
+struct IGAShellStressOutput{P<:IGAShell,T} <: Five.AbstractOutput
     igashell::Base.RefValue{P}
     time_interval::T
     lastoutput::Base.RefValue{T}
@@ -162,7 +162,7 @@ end
 IGAShellRecovoredStressOutput
     Output
 """
-struct IGAShellRecovoredStressOutput{dim_s, T, P<:IGAShell} <: StateOutput
+struct IGAShellRecovoredStressOutput{dim_s, T, P<:IGAShell} <: Five.AbstractOutput
     igashell::Base.RefValue{P}
     time_interval::T
     lastoutput::Base.RefValue{T}
@@ -212,7 +212,7 @@ end
 IGAShellIntegrationValuesOutput
     Output
 """
-struct IGAShellIntegrationValuesOutput{P<:IGAShell,T} <: StateOutput
+struct IGAShellIntegrationValuesOutput{P<:IGAShell,T} <: Five.AbstractOutput
     igashell::Base.RefValue{P}
     time_interval::T
     lastoutput::Base.RefValue{T}
@@ -527,7 +527,7 @@ end
 IGAShellBCOutput
     Output forces and deisplacement from global forcevectors and displacements vector
 """
-struct IGAShellBCOutput{P<:IGAShell,T} <: StateOutput
+struct IGAShellBCOutput{P<:IGAShell,T} <: Five.AbstractOutput
     igashell::Base.RefValue{P}
     time_interval::T
     lastoutput::Base.RefValue{T}
@@ -608,7 +608,7 @@ IGAShellTractionForces
 """
 const InterfaceTractionJumpPosition{dim_s,T} = Tuple{Vec{dim_s,T}, Vec{dim_s,T}, Vec{dim_s,T}}
 
-struct IGAShellTractionForces{P<:IGAShell,dim_s,T} <: StateOutput
+struct IGAShellTractionForces{P<:IGAShell,dim_s,T} <: Five.AbstractOutput
     igashell::Base.RefValue{P}
     time_interval::T
     lastoutput::Base.RefValue{T}

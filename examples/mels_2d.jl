@@ -1,5 +1,5 @@
 using Five
-using IGAShell
+using IgAShell
 
 #Dimension
 const DIM = 3
@@ -46,7 +46,7 @@ bc_penalty = 1e7
 
 @show τ_approx = sqrt( (9pi*E1*G1)/(32*Ne0*le) )
 
-#interfacematerial = eliasfem.MatCohesive{dim}(λ_0,λ_f,τ,K)
+#interfacematerial = IGAShell.MatCohesive{dim}(λ_0,λ_f,τ,K)
 interfacematerial = MatCZBilinear(
     K = 1.0e5,
     τᴹᵃˣ = ( 1050/1000, 1050/1000, 211.0/1000 ), 
@@ -88,9 +88,9 @@ addvertexset!(grid, "zfixed", (x)-> x[1] ≈ 9.5)
 #@show getindex.(getproperty.(grid.nodes, :x), 1)
 #@show length(getvertexset(grid, "zfixed"))
 
-cellstates = [eliasfem.LAYERED for i in 1:prod(nels)]
-cellstates[precracked_u] .= eliasfem.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
-cellstates[precracked_l] .= eliasfem.STRONG_DISCONTINIUOS_AT_INTERFACES((1,3))
+cellstates = [IGAShell.LAYERED for i in 1:prod(nels)]
+cellstates[precracked_u] .= IGAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
+cellstates[precracked_l] .= IGAShell.STRONG_DISCONTINIUOS_AT_INTERFACES((1,3))
 
 ninterfaces = nlayers - 1
 
@@ -100,7 +100,7 @@ interface_damage[3, precracked_u] .= 1.0
 
 #IGAshell data
 igashelldata = 
-eliasfem.IGAShellData(;
+IGAShell.IGAShellData(;
     layer_materials           = layer_mats,
     interface_material        = interfacematerial,
     viscocity_parameter       = 0.0,
@@ -119,7 +119,7 @@ eliasfem.IGAShellData(;
 )  
 
 igashell = 
-eliasfem.IGAShell(
+IGAShell.IGAShell(
     cellset = partset1, 
     connectivity = reverse(nurbsmesh.IEN, dims=1), 
     data = igashelldata
@@ -146,28 +146,28 @@ push!(data.constraints, etf)
 #Supprted bottom
 zfixedcell = collect(getvertexset(grid, "zfixed"))[2]
 z_fixed_edgeset = VertexInterfaceIndex(zfixedcell..., 1)
-etf = eliasfem.IGAShellWeakBC( [z_fixed_edgeset], (x,t) -> [0.0], [dim], igashell, penalty = bc_penalty)
+etf = IGAShell.IGAShellWeakBC( [z_fixed_edgeset], (x,t) -> [0.0], [dim], igashell, penalty = bc_penalty)
 push!(data.constraints, etf)
 
 #Force
 edgeset = VertexInterfaceIndex(getvertexset(grid, "right"), 2)
-#etf = eliasfem.IGAShellWeakBC(edgeset, (x,t) -> [-t*umax], [dim], igashell, penalty = bc_penalty)
+#etf = IGAShell.IGAShellWeakBC(edgeset, (x,t) -> [-t*umax], [dim], igashell, penalty = bc_penalty)
 #push!(data.constraints, etf)
-etf = eliasfem.IGAShellExternalForce(edgeset, (x,t) -> [zeros(T,dim-1)..., -1.0/b], igashell)
+etf = IGAShell.IGAShellExternalForce(edgeset, (x,t) -> [zeros(T,dim-1)..., -1.0/b], igashell)
 push!(data.external_forces, etf)
 
-data.outputs["forcedofs2"] = eliasfem.IGAShellBCOutput(Ref(igashell), outputset = edgeset, components = [dim], interval = 0.00)
+data.outputs["forcedofs2"] = IGAShell.IGAShellBCOutput(Ref(igashell), outputset = edgeset, components = [dim], interval = 0.00)
 
 #Stress output
 #=postcells = [50, 75, 90]
-stress_output = eliasfem.IGAShellStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
+stress_output = IGAShell.IGAShellStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
 data.outputs["Stress at 50%"] = stress_output
-stress_output = eliasfem.IGAShellRecovoredStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
+stress_output = IGAShell.IGAShellRecovoredStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
 data.outputs["RS at 50%"] = stress_output=#
 
-solverinput = eliasfem._build_problem(data) do dh, parts, dbc
-    instructions = eliasfem.initial_upgrade_of_dofhandler(dh, igashell)
-    eliasfem.update_dofhandler!(dh, eliasfem.StateVariables(T, ndofs(dh)), eliasfem.StateVariables(T, ndofs(dh)), eliasfem.SystemArrays(T, ndofs(dh)), instructions)
+solverinput = IGAShell._build_problem(data) do dh, parts, dbc
+    instructions = IGAShell.initial_upgrade_of_dofhandler(dh, igashell)
+    IGAShell.update_dofhandler!(dh, IGAShell.StateVariables(T, ndofs(dh)), IGAShell.StateVariables(T, ndofs(dh)), IGAShell.SystemArrays(T, ndofs(dh)), instructions)
     
     alldofs = collect(1:ndofs(dh))
     JuAFEM.copy!!(dbc.free_dofs, alldofs)
@@ -176,12 +176,12 @@ solverinput = eliasfem._build_problem(data) do dh, parts, dbc
     local_locked_dofs = Int[]
     index  = first(getvertexset(grid, "left"))
     cellid, faceid = index
-    append!(local_locked_dofs, eliasfem.igashelldofs(igashell, index))
+    append!(local_locked_dofs, IGAShell.igashelldofs(igashell, index))
 
     globaldofs = celldofs(dh, cellid)
     locked_dofs = globaldofs[local_locked_dofs]
     
-    #append!(loacked_dofs, eliasfem.igashelldofs(igashell, z_fixed_edgeset))
+    #append!(loacked_dofs, IGAShell.igashelldofs(igashell, z_fixed_edgeset))
     alldofs = collect(1:ndofs(dh))
 
     JuAFEM.copy!!(dbc.prescribed_dofs, locked_dofs)

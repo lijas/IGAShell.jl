@@ -2,7 +2,7 @@
 #
 #
 
-struct IGAShellWeakBC{P<:IGAShell} <: AbstractExternalForce
+struct IGAShellWeakBC{P<:IGAShell} <: Five.AbstractExternalForce
     faceset::GeometryObjectVectors
     prescribed_displacement::Function
     components::Vector{Int}

@@ -196,7 +196,7 @@ end
 """
 
 """
-struct IGAShellData{dim_p,dim_s,T,LM<:LayeredMaterial,IM<:AbstractCohesiveMaterial}
+struct IGAShellData{dim_p,dim_s,T,LM<:Five.LayeredMaterial,IM<:Five.AbstractCohesiveMaterial}
     layer_materials::LM
     interface_material::IM
     viscocity_parameter::T
@@ -233,7 +233,7 @@ function IGAShellData(;
     adaptable::Bool                         = false,
     LIMIT_UPGRADE_INTERFACE::T              = 0.01,
     small_deformations_theory::Bool         = false,
-    nqp_interface_order::Int                = nqp_inplane_order) where {dim_p,dim_s,T,LM<:LayeredMaterial,IM<:AbstractCohesiveMaterial}
+    nqp_interface_order::Int                = nqp_inplane_order) where {dim_p,dim_s,T,LM<:Five.LayeredMaterial,IM<:Five.AbstractCohesiveMaterial}
 
     #-----
     ninterfaces = nlayers-1
@@ -276,7 +276,7 @@ getmidsurface_ip(data::IGAShellData{dim_p,dim_s}) where {dim_p, dim_s} = IGA.Ber
 ooplane_order(data::IGAShellData{dim_p,dim_s}) where {dim_p,dim_s} = data.orders[dim_s]
 
 JuAFEM.getnquadpoints(data::IGAShellData{dim_p}) where dim_p = data.nqp_inplane_order^dim_p * data.nqp_ooplane_per_layer * data.nlayers
-getnquadpoints_ooplane(data::eliasfem.IGAShellData) = data.nqp_ooplane_per_layer * data.nlayers
+getnquadpoints_ooplane(data::IGAShellData) = data.nqp_ooplane_per_layer * data.nlayers
 
 getmaterial(data::IGAShellData) = return data.layer_materials
 getinterfacematerial(data::IGAShellData) = return data.interface_material

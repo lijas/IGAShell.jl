@@ -2,7 +2,7 @@
 # DoubleMaterial - Special case where one has to lump two materials together
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-struct IGAShellMaterial{N,LM,IM} <: AbstractMaterial
+struct IGAShellMaterial{N,LM,IM} <: Five.AbstractMaterial
     layer_materials::LayeredMaterial{N,LM}
     interface_material::IM #Probobly only need one interface_material
 
@@ -12,7 +12,7 @@ struct IGAShellMaterial{N,LM,IM} <: AbstractMaterial
 
 end
 
-struct IGAShellMaterialState{LM,IM} <: AbstractMaterialState
+struct IGAShellMaterialState{LM,IM} <: Five.AbstractMaterialState
     layer_material_states::LM
     interface_material_states::IM
 end
