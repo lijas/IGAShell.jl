@@ -112,8 +112,8 @@ data.output[] = Output(
 
 #
 etf = IGAShellWeakBC( 
-    set = getvertexset(grid, "left"), 
-    func = (x,t) -> zeros(T,dim), 
+    set = getvertexset(data.grid, "left"), 
+    func = (x,t) -> zeros(DIM), 
     comps = 1:DIM,
     igashell = igashell, 
     penalty = 1e7
@@ -133,8 +133,9 @@ edgeset = VertexInterfaceIndex(getvertexset(grid, "right"), 2)
 #push!(data.constraints, etf)
 etf = IGAShell.IGAShellExternalForce(edgeset, (x,t) -> [zeros(T,dim-1)..., -1.0/b], igashell)
 push!(data.external_forces, etf)
-=#
+
 data.outputs["forcedofs2"] = IGAShell.IGAShellBCOutput(Ref(igashell), outputset = edgeset, components = [dim], interval = 0.00)
+=#
 
 #Stress output
 #=postcells = [50, 75, 90]
@@ -143,40 +144,24 @@ data.outputs["Stress at 50%"] = stress_output
 stress_output = IGAShell.IGAShellRecovoredStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
 data.outputs["RS at 50%"] = stress_output=#
 
-solverinput = IGAShell._build_problem(data) do dh, parts, dbc
-    instructions = IGAShell.initial_upgrade_of_dofhandler(dh, igashell)
-    IGAShell.update_dofhandler!(dh, IGAShell.StateVariables(T, ndofs(dh)), IGAShell.StateVariables(T, ndofs(dh)), IGAShell.SystemArrays(T, ndofs(dh)), instructions)
+solver = NewtonSolver(
+    Δt0 = 0.1,
+    Δt_max = 0.1,
+)
+
+state, globaldata = build_problem(data) do dh, parts, dbc
+    instructions = IgAShell.initial_upgrade_of_dofhandler(dh, igashell)
+    Five.update_dofhandler!(dh, StateVariables(Float64, ndofs(dh)), instructions)
     
     alldofs = collect(1:ndofs(dh))
     JuAFEM.copy!!(dbc.free_dofs, alldofs)
-
-    #=
-    local_locked_dofs = Int[]
-    index  = first(getvertexset(grid, "left"))
-    cellid, faceid = index
-    append!(local_locked_dofs, IGAShell.igashelldofs(igashell, index))
-
-    globaldofs = celldofs(dh, cellid)
-    locked_dofs = globaldofs[local_locked_dofs]
-    
-    #append!(loacked_dofs, IGAShell.igashelldofs(igashell, z_fixed_edgeset))
-    alldofs = collect(1:ndofs(dh))
-
-    JuAFEM.copy!!(dbc.prescribed_dofs, locked_dofs)
-    JuAFEM.copy!!(dbc.free_dofs, setdiff(alldofs, locked_dofs))
-    JuAFEM.copy!!(dbc.values, zeros(T, length(locked_dofs)))
-    =#
 end
 
-solver = DissipationSolver(Δλ0 = 1e-5, Δλ_max = 10.0, Δλ_min = 1e-8, ΔL0 = 2.5e-0, ΔL_min = 1e-6, ΔL_max = 5e0, sw2d = 1.0, sw2i = 1e-7, optitr = 5, maxitr = 17, maxsteps = 1000, λ_max = 700.0, λ_min = -50.0, tol=1e-4, max_residual=1e5)
-#solver = StaticSolver2{dim,T}(0.0, data.tend, 0.01);
-#par = ArcLengthSolverParameters(Δλ = 5.0, Δλ_max = 10.0, Δλ_min = 1e-8, ΔL = 5e-0, ΔL_min = 1e-6, ΔL_max = 5e0, sw2d = 1e-1, sw2i = 1e-7, maxitr = 600, λmax = 1000, λmin = -50)
-#solver =  ArcLengthSolver{dim,T}(0.0, data.tend, 0.01, par);
-return solver, solverinput
+#solver = DissipationSolver(Δλ0 = 1e-5, Δλ_max = 10.0, Δλ_min = 1e-8, ΔL0 = 2.5e-0, ΔL_min = 1e-6, ΔL_max = 5e0, sw2d = 1.0, sw2i = 1e-7, optitr = 5, maxitr = 17, maxsteps = 1000, λ_max = 700.0, λ_min = -50.0, tol=1e-4, max_residual=1e5)
 
 
 
 
-output = solvethis(solver, solverinput...)
+output = solvethis(solver, state, globaldata)
 
 

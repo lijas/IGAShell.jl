@@ -211,9 +211,9 @@ function set_inp_basefunctions!(cv::IGAShellValues{dim_s,dim_p,T}, inplane_basis
     @assert getnbasefunctions(inplane_basisvalues) == getnbasefunctions_inplane(cv)
     @assert getnquadpoints(inplane_basisvalues) == getnquadpoints_inplane(cv)
 
-    cv.N .= inplane_basisvalues.N
-    cv.dNdξ .= inplane_basisvalues.dNdξ
-    cv.dN²dξ² .= inplane_basisvalues.d²Ndξ²
+    cv.inplane_values_bezier.N .= inplane_basisvalues.N
+    cv.inplane_values_bezier.dNdξ .= inplane_basisvalues.dNdξ
+    cv.inplane_values_bezier.d²Ndξ² .= inplane_basisvalues.d²Ndξ²
 
 end
 
@@ -242,7 +242,7 @@ function _inplane_nurbs_bezier_extraction(cv::IGAShellValues{dim_s,dim_p,T}, C::
     B      = cv.inplane_values_bezier.N
     
     for iq in 1:getnquadpoints_inplane(cv)
-        for ib in 1:getngeombasefunctions_inplane(cv)
+        for ib in 1:getnbasefunctions_inplane(cv)
             
             cv.inplane_values_nurbs.N[ib, iq] = zero(eltype(cv.inplane_values_nurbs.N))
             cv.inplane_values_nurbs.dNdξ[ib, iq] = zero(eltype(cv.inplane_values_nurbs.dNdξ))
@@ -414,7 +414,7 @@ function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords
 
 end
 
-function reinit_midsurface!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
+function JuAFEM.reinit!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
 
     qp = 0
     for iqp in 1:getnquadpoints_inplane(cv)
@@ -546,20 +546,22 @@ function JuAFEM.shape_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::Abst
     return val
 end
 
-function shape_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{Vec{dim_s,T}}, Θ::Int, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}
+function shape_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{Vec{dim_s,T}}, Θ::Int) where {dim_s,dim_p,T}
     grad = zero(Vec{dim_s,T})
-    @assert(length(ue) == length(active_dofs))
-    @inbounds for (i,j) in enumerate(active_dofs)
-        grad += cv.inplane_values_bezier.dNdξ[j,qp][Θ] * ue[i]
+    nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
+    @assert(length(ue) == nbasefuncs)
+    @inbounds for i in 1:nbasefuncs
+        grad += cv.inplane_values_bezier.dNdξ[i,qp][Θ] * ue[i]
     end
     return grad
 end
 
-function shape_parent_second_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{Vec{dim_s,T}}, Θ::Tuple{Int,Int}, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}
+function shape_parent_second_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{Vec{dim_s,T}}, Θ::Tuple{Int,Int}) where {dim_s,dim_p,T}
     grad = zero(Vec{dim_s,T})
-    @assert(length(ue) == length(active_dofs))
-    @inbounds for (i,j) in enumerate(active_dofs)
-        grad += cv.inplane_values_bezier.dN²dξ²[j,qp][Θ[1],Θ[2]] * ue[i]
+    nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
+    @assert(length(ue) == nbasefuncs)
+    @inbounds for i in 1:nbasefuncs
+        grad += cv.inplane_values_bezier.d²Ndξ²[i,qp][Θ[1],Θ[2]] * ue[i]
     end
     return grad
 end

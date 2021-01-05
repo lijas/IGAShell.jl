@@ -61,8 +61,9 @@ JuAFEM.getdim(igashell::IGAShell{dim_p,dim_s}) where {dim_p,dim_s} = dim_s
 JuAFEM.getncells(igashell::IGAShell) = length(igashell.cellset)
 JuAFEM.getnnodes(igashell::IGAShell) = maximum(igashell.cell_connectivity)
 
-get_fields(igashell::IGAShell) = [Field(:u, getmidsurface_ip(layerdata(igashell)), ndofs_per_controlpoint(igashell, LUMPED))]
-get_cellset(igashell::IGAShell) = igashell.cellset
+Five.get_fields(igashell::IGAShell) = [Field(:u, getmidsurface_ip(layerdata(igashell)), ndofs_per_controlpoint(igashell, LUMPED))]
+
+Five.get_cellset(igashell::IGAShell) = igashell.cellset
 
 get_inplane_qp_range(igashell::IGAShell; ilayer::Int, row::Int) = get_inplane_qp_range(getnquadpoints_per_layer(igashell), getnquadpoints_inplane(igashell), ilayer::Int, row::Int)
 function get_inplane_qp_range(n_qp_per_layer::Int, n_inpqp::Int, ilayer::Int, row::Int)
@@ -101,11 +102,11 @@ function IGAShell(;
     intdata = IGAShellIntegrationData(data, Ce_vec)
     srdata = IGAShellStressRecovory(data)
 
-    return IGAShell{dim_p,dim_s,T, typeof(data), typeof(intdata), typeof(adapdata), typeof(vtkdata), typeof(srdata)}(data, intdata, adapdata, vtkdata, srdata, cellset, cell_connectivity)
+    return IGAShell{dim_p,dim_s,T, typeof(data), typeof(intdata), typeof(adapdata), typeof(vtkdata), typeof(srdata)}(data, intdata, adapdata, vtkdata, srdata, cellset, connectivity)
 
 end
 
-function init!(igashell::IGAShell, dh::JuAFEM.AbstractDofHandler)
+function Five.init_part!(igashell::IGAShell, dh::JuAFEM.AbstractDofHandler)
     _init_vtk_grid!(dh, igashell)
 end
 
@@ -117,13 +118,13 @@ end
 @inline getcellqps(state::IGAShellState, cellid::Int) = state.materialstates[cellid]
 @inline getinterfaceqps(state::IGAShellState, cellid::Int) = state.interfacestates[cellid]
 
-function construct_partstates(igashell::IGAShell)
+function Five.construct_partstates(igashell::IGAShell)
     
     cellmaterial = getmaterial(layerdata(igashell))[1]
     intmaterial = getinterfacematerial(layerdata(igashell))
 
-    mstate = get_material_state_type(cellmaterial)
-    istate = get_material_state_type(intmaterial)
+    mstate = Five.get_material_state_type(cellmaterial)
+    istate = Five.get_material_state_type(intmaterial)
 
     ninterface_qp = getnquadpoints_per_interface(igashell)
     nshell_qp = getnquadpoints_per_layer(igashell)
@@ -131,8 +132,8 @@ function construct_partstates(igashell::IGAShell)
     states = Vector{IGAShellState{mstate,istate}}(undef,length(igashell.cellset))
     for ic in 1:length(igashell.cellset)
         interface_damage = layerdata(igashell).initial_interface_damages
-        mstates = [mstate(cellmaterial) for i in 1:nshell_qp, _ in 1:nlayers(igashell)]
-        istates = [istate(intmaterial, interface_damage[iint, ic]) for _ in 1:ninterface_qp, iint in 1:ninterfaces(igashell)]
+        mstates = [Five.getmaterialstate(cellmaterial) for i in 1:nshell_qp, _ in 1:nlayers(igashell)]
+        istates = [Five.getmaterialstate(intmaterial, interface_damage[iint, ic]) for _ in 1:ninterface_qp, iint in 1:ninterfaces(igashell)]
 
         states[ic] = IGAShellState{mstate, istate}(mstates, istates)
     end
@@ -158,7 +159,6 @@ function build_cellvalue!(igashell, cellid::Int)
         cv = intdata(igashell).cell_values_mixed
         oop_values = _build_oop_basisvalue!(igashell, cellid)
         set_oop_basefunctions!(cv, oop_values)
-        build_bezier_basefunctions!(cv)
     else
         error("wrong cellstate")
     end
@@ -174,8 +174,6 @@ function build_cohesive_cellvalue!(igashell, cellid::Int)
 
     set_oop_basefunctions!(cv_top, oop_cohesive_top_values)
     set_oop_basefunctions!(cv_bot, oop_cohesive_bot_values)
-    build_bezier_basefunctions!(cv_top)
-    build_bezier_basefunctions!(cv_bot)
     
     return cv_top, cv_bot
 end
@@ -188,7 +186,6 @@ function build_facevalue!(igashell, faceidx::FaceIndex)
  
     set_quadraturerule!(cv, get_face_qr(intdata(igashell), faceid))
     set_oop_basefunctions!(cv, oop_values)
-    build_bezier_basefunctions!(cv)
 
     return cv
 end 
@@ -205,7 +202,6 @@ function build_facevalue!(igashell::IGAShell{1,2}, edgeidx::VertexIndex)
 
     set_inp_basefunctions!(cv, basisvalues_inplane)
     set_oop_basefunctions!(cv, oop_values)
-    build_bezier_basefunctions!(cv)
 
     return cv
 end 
@@ -220,7 +216,6 @@ function build_facevalue!(igashell, edgeidx::EdgeIndex)
 
     set_inp_basefunctions!(cv, basisvalues_inplane)
     set_oop_basefunctions!(cv, oop_values)
-    build_bezier_basefunctions!(cv)
 
     return cv
 end 
@@ -236,7 +231,6 @@ function build_facevalue!(igashell, edgeidx::EdgeInterfaceIndex)
     set_quadraturerule!(cv, get_face_qr(intdata(igashell), face))
     set_inp_basefunctions!(cv, basisvalues_inplane)
     set_oop_basefunctions!(cv, oop_values) 
-    build_bezier_basefunctions!(cv)
 
     return cv
 end 
@@ -254,7 +248,6 @@ function build_facevalue!(igashell, vertex::VertexInterfaceIndex)
     set_quadraturerule!(cv, get_face_qr(intdata(igashell), face))
     set_inp_basefunctions!(cv, basisvalues_inplane)
     set_oop_basefunctions!(cv, oop_values) 
-    build_bezier_basefunctions!(cv)
 
     return cv
 end 
@@ -427,16 +420,16 @@ end
 
 @enum IGASHELL_ASSEMBLETYPE IGASHELL_FORCEVEC IGASHELL_STIFFMAT IGASHELL_FSTAR IGASHELL_DISSIPATION
 
-function assemble_fstar!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
+function Five.assemble_fstar!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_FSTAR)
 end
 
-function assemble_dissipation!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
+#=function Five.assemble_dissipation!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_DISSIPATION)
-end
+end=#
 
 
-function assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables) 
+function Five.assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables) 
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_STIFFMAT)
 end
 
@@ -445,7 +438,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                                                      state::StateVariables, 
                                                      assemtype::IGASHELL_ASSEMBLETYPE) where {dim_p,dim_s,T}
 
-    assembler = start_assemble(system_arrays.Kⁱ, system_arrays.fⁱ, fillzero=false)  
+    assembler = start_assemble(state.system_arrays.Kⁱ, state.system_arrays.fⁱ, fillzero=false)  
 
     nnodes = JuAFEM.nnodes_per_cell(igashell)
     X = zeros(Vec{dim_s,T}, nnodes)
@@ -473,9 +466,8 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
 
         Xᵇ .= IGA.compute_bezier_points(Ce, X)
         @timeit "reinit1" reinit!(cv, Xᵇ)
-        @timeit "reinit2" build_nurbs_basefunctions!(cv)
 
-        ⁿmaterialstates = state.ⁿpartstates[ic].materialstates
+        ⁿmaterialstates = state.prev_partstates[ic].materialstates
         materialstates = state.partstates[ic].materialstates
 
         for ilay in 1:nlayers(igashell)
@@ -530,7 +522,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         cv_cohesive_top, 
         cv_cohesive_bot = build_cohesive_cellvalue!(igashell, ic) 
 
-        ⁿinterfacestates = state.ⁿpartstates[ic].interfacestates
+        ⁿinterfacestates = state.prev_partstates[ic].interfacestates
         interfacestates = state.partstates[ic].interfacestates
 
         ndofs = JuAFEM.ndofs_per_cell(dh,cellid)
@@ -563,9 +555,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
             IGA.set_bezier_operator!(cv_cohesive_top, Ce)
             IGA.set_bezier_operator!(cv_cohesive_bot, Ce)
 
-            @timeit "reinit2" build_nurbs_basefunctions!(cv_cohesive_top)
-            @timeit "reinit2" build_nurbs_basefunctions!(cv_cohesive_bot)
-            
             ue_interface = @view ue[active_dofs]
             Δue_interface = @view Δue[active_dofs]
 
@@ -642,7 +631,7 @@ function assemble_massmatrix!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell
 
 end
 
-function post_part!(dh, igashell::IGAShell{dim_p,dim_s}, states) where {dim_s, dim_p}
+function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s}, states) where {dim_s, dim_p}
     #if dim_s == 2
     #    return
     #end
@@ -674,7 +663,6 @@ function post_part!(dh, igashell::IGAShell{dim_p,dim_s}, states) where {dim_s, d
         #Build basis_values for cell
         cv = build_cellvalue!(igashell, ic)
         IGA.set_bezier_operator!(cv, Ce)
-        build_nurbs_basefunctions!(cv)
         reinit!(cv, Xᵇ)
 
         #Build basis_values for stress_recovory
@@ -682,8 +670,6 @@ function post_part!(dh, igashell::IGAShell{dim_p,dim_s}, states) where {dim_s, d
         oop_values = _build_oop_basisvalue!(igashell, ic, -1)
         set_oop_basefunctions!(cv_sr, oop_values)
         IGA.set_bezier_operator!(cv_sr, Ce)
-        build_bezier_basefunctions!(cv_sr)
-        build_nurbs_basefunctions!(cv_sr)
         reinit!(cv_sr, Xᵇ)
 
         recover_cell_stresses(srdata(igashell), σ_states, celldata, cv_sr, cv)
@@ -764,7 +750,7 @@ end
 
     #Rotate strain
      _̂ε = symmetric(R' ⋅ ɛ ⋅ R)
-     _̂σ, ∂̂σ∂ɛ, new_matstate = constitutive_driver(material[ilay], _̂ε, ⁿmaterialstates[layer_qp])
+     _̂σ, ∂̂σ∂ɛ, new_matstate = Five.constitutive_driver(material[ilay], _̂ε, ⁿmaterialstates[layer_qp])
     materialstates[layer_qp] = new_matstate
     ∂σ∂ɛ = otimesu(R,R) ⊡ ∂̂σ∂ɛ ⊡ otimesu(R',R')
     σ = R⋅_̂σ⋅R'
@@ -797,7 +783,7 @@ end
     E = symmetric(1/2 * (F' ⋅ F - one(F)))
     #Ê = symmetric(R' ⋅ E ⋅ R)
 
-    S, ∂S∂E, new_matstate = constitutive_driver(material[ilay], E, ⁿmaterialstates[layer_qp])
+    S, ∂S∂E, new_matstate = Five.constitutive_driver(material[ilay], E, ⁿmaterialstates[layer_qp])
     materialstates[layer_qp] = new_matstate
 
     σ = inv(det(F)) * F ⋅ S ⋅ F'
@@ -850,8 +836,8 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
         u₊ = zero(Vec{dim_s,T}); u₋ = zero(Vec{dim_s,T}) 
         #Δu₊ = zero(Vec{dim_s,T}); Δu₋ = zero(Vec{dim_s,T}) 
         for (i,j) in enumerate(active_dofs)
-            u₊ += cv_top.U[j,qp] * ue[i]
-            u₋ += cv_bot.U[j,qp] * ue[i]
+            u₊ += cv_top.N[j,qp] * ue[i]
+            u₋ += cv_bot.N[j,qp] * ue[i]
 
            # Δu₊ += cv_top.U[j,qp] * Δue[i]
             #Δu₋ += cv_bot.U[j,qp] * Δue[i]
@@ -862,7 +848,7 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
         Ĵ = R'⋅J
         
         #constitutive_driver
-        t̂, ∂t∂Ĵ, new_matstate = constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
+        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
         new_materialstate[qp-qp_offset] = new_matstate
 
         t = R⋅t̂
@@ -1070,11 +1056,11 @@ function _cohesvive_rotation_matrix!(cv_top::IGAShellValues{dim_s,dim_p,T},
     return R, dV
 end
 
-function get_vtk_grid(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}) where {dim_p,dim_s,T}
+function Five.get_vtk_grid(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}) where {dim_p,dim_s,T}
     return igashell.vtkdata.cls, igashell.vtkdata.node_coords
 end
 
-function commit_part!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s}, state::StateVariables, prev_state::StateVariables, system_arrays::SystemArrays) where {dim_p,dim_s}
+function Five.commit_part!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s}, state::StateVariables, prev_state::StateVariables, system_arrays::SystemArrays) where {dim_p,dim_s}
     
     if !is_adaptive(igashell)
         return FieldDimUpgradeInstruction[]

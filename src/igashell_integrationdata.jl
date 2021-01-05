@@ -201,13 +201,13 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
 
     #Quadratre rules
     iqr = QuadratureRule{dim_p,RefCube}(data.nqp_inplane_order)
-    oqr = _generate_ooplane_quadraturerule(T, data.zcoords, nqp_per_layer = data.nqp_ooplane_per_layer)
+    oqr = Five.generate_ooplane_quadraturerule(T, data.zcoords, nqp_per_layer = data.nqp_ooplane_per_layer)
     
     oqr_face = [QuadratureRule{1,RefCube,T}(T[1.0], [Vec((-1.0,))]), 
                QuadratureRule{1,RefCube,T}(T[1.0], [Vec((1.0,))])]
 
     iqr_inp_cohesive = QuadratureRule{dim_p,RefCube}(data.nqp_interface_order)
-    oqr_cohesive = _generate_cohesive_oop_quadraturerule(data.zcoords)
+    oqr_cohesive = generate_cohesive_oop_quadraturerule(data.zcoords)
     iqr_sides =  JuAFEM.create_face_quad_rule(QuadratureRule{dim_p-1,RefCube}(5), Lagrange{dim_p,RefCube,1}()) #HARDCODED
     iqr_vertices =  JuAFEM.create_face_quad_rule(QuadratureRule{0,RefCube}(0), Lagrange{dim_p,RefCube,1}()) #HARDCODED
 
@@ -236,18 +236,15 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     oop_ip = [ip_lumped for i in 1:getnbasefunctions(mid_ip)]
     cell_values_lumped = IGAShellValues(data.thickness, iqr, oqr, mid_ip, getnbasefunctions(ip_lumped), oop_ip)
     set_oop_basefunctions!(cell_values_lumped, cache.basis_values_lumped)
-    build_bezier_basefunctions!(cell_values_lumped)
     
     #
     cell_values_discont = IGAShellValues(data.thickness, iqr, oqr, mid_ip, getnbasefunctions(ip_discont))
     set_oop_basefunctions!(cell_values_discont, cache.basis_values_discont)
-    build_bezier_basefunctions!(cell_values_discont)
 
     #
     oop_ip = [ip_layered for i in 1:getnbasefunctions(mid_ip)]
     cell_values_layered = IGAShellValues(data.thickness, iqr, oqr, mid_ip, getnbasefunctions(ip_layered), oop_ip)
     set_oop_basefunctions!(cell_values_layered, cache.basis_values_layered)
-    build_bezier_basefunctions!(cell_values_layered)
     #
 
     initial_basis_values = cache.basis_values_lumped 
@@ -257,7 +254,6 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     oop_ip = [initial_ip for i in 1:getnbasefunctions(mid_ip)]
     cell_values_sr = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr, mid_ip, getnbasefunctions(cache.basis_values_discont), oop_ip)
     set_oop_basefunctions!(cell_values_sr, initial_basis_values)
-    build_bezier_basefunctions!(cell_values_sr)
 
     ###
     # Cohesive data

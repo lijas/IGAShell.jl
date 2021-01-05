@@ -12,7 +12,7 @@ function IGAShellExternalForce(cellset, traction::Function, igashell::IGAShell)
     return IGAShellExternalForce{typeof(igashell)}(collect(cellset), traction, Base.RefValue(igashell))
 end
 
-function _apply_external_force!(dh::JuAFEM.AbstractDofHandler, ef::IGAShellExternalForce{P}, state::StateVariables, prev_state::StateVariables, system_arrays::SystemArrays{T}, globaldata) where {P,T}
+function Five.apply_external_force!(dh::JuAFEM.AbstractDofHandler, ef::IGAShellExternalForce{P}, state::StateVariables, prev_state::StateVariables, system_arrays::SystemArrays{T}, globaldata) where {P,T}
     
     #Igashell extract
     igashell = ef.igashell[]
@@ -47,9 +47,8 @@ function _apply_external_force!(dh::JuAFEM.AbstractDofHandler, ef::IGAShellExter
         
         #
         @timeit "build" cv = build_facevalue!(igashell, faceidx)
-        reinit!(cv, Xᵇ)
         IGA.set_bezier_operator!(cv, Ce)
-        build_nurbs_basefunctions!(cv)
+        reinit!(cv, Xᵇ)
         
         @timeit "integrate" A += _compute_igashell_external_traction_force!(cv, Xᵇ, traction, faceidx, state.t, fe, getwidth(layerdata(igashell)))
        

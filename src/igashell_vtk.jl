@@ -24,7 +24,6 @@ function IGAShellVTK(data::IGAShellData{dim_p,dim_s,T}) where {dim_p,dim_s,T}
 
     cv = IGAShellValues(data.thickness, plot_point_inplane, plot_points_ooplane, mid_ip, getnbasefunctions(bbasis_discont))
     set_oop_basefunctions!(cv, discont_values)
-    build_bezier_basefunctions!(cv)
 
     return IGAShellVTK{dim_p,dim_s,T,typeof(cv)}(cv, n_plot_points_dim, Vec{dim_s,T}[], MeshCell{VTKCellType, Vector{Int}}[])
 end
@@ -59,9 +58,8 @@ function _init_vtk_grid!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p
         JuAFEM.cellcoords!(coords, dh, cellid)
         bezier_coords .= IGA.compute_bezier_points(Ce, coords)
         
-        reinit!(cv_plot, bezier_coords)
         IGA.set_bezier_operator!(cv_plot, Ce)
-        build_nurbs_basefunctions!(cv_plot)
+        reinit!(cv_plot, bezier_coords)
 
         _init_vtk_cell!(igashell, cls, node_coords, vtkdata(igashell).cell_values_plot, bezier_coords, node_offset, n_plot_points_dims)
         cellcount = length(cls)
@@ -134,7 +132,7 @@ end
 Calculates the dispalcements at the nodes of the underlying FE-mesh 
 
 """
-function get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, state::StateVariables) where {dim_p,dim_s,T}
+function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, state::StateVariables) where {dim_p,dim_s,T}
 
 
     node_coords = Vec{dim_s,T}[]
@@ -150,11 +148,8 @@ function get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell
         
         Ce = get_extraction_operator(intdata(igashell), ic)
         
-        #No need to reinit cellvalues
-        #reinit!(cv_plot, bezier_coords)
         IGA.set_bezier_operator!(cv_plot, Ce)
-        build_nurbs_basefunctions!(cv_plot)
-
+        reinit!(cv_plot, bezier_coords)
 
         #Get displacement for this cell
         ndofs = JuAFEM.ndofs_per_cell(dh,cellid)

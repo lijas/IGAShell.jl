@@ -1,3 +1,4 @@
+export IGAShellWeakBC
 #
 #
 #
@@ -13,18 +14,18 @@ end
 function IGAShellWeakBC(; 
     set, 
     func::Function,
-    comps::Vector{Int}, 
+    comps::AbstractVector{Int}, 
     igashell::IGAShell{dim_p,dim_s,T},
     penalty::T
     ) where {dim_p,dim_s,T}
     
-    @assert( length(components) == length(prescribed_displacement(zero(Vec{dim_s,T}), 0.0)) )
+    @assert( length(comps) == length(func(zero(Vec{dim_s,T}), 0.0)) )
 
-    return IGAShellWeakBC{typeof(igashell)}(collect(faceset), func, comps, Base.RefValue(igashell), penalty)
+    return IGAShellWeakBC{typeof(igashell)}(collect(set), func, collect(comps), Base.RefValue(igashell), penalty)
 end
 
 #TODO: combine igashell_external_force_with igashellweakbc
-function _apply_external_force!(dh::JuAFEM.AbstractDofHandler, wb::IGAShellWeakBC, state::StateVariables, globaldata) where {T}
+function Five.apply_external_force!(dh::JuAFEM.AbstractDofHandler, wb::IGAShellWeakBC, state::StateVariables{T}, globaldata) where {T}
     
     
     #Igashell extract
@@ -60,14 +61,13 @@ function _apply_external_force!(dh::JuAFEM.AbstractDofHandler, wb::IGAShellWeakB
         #
         @timeit "build" cv = build_facevalue!(igashell, faceidx)
 
-        reinit!(cv, Xᵇ)
         IGA.set_bezier_operator!(cv, Ce)
-        build_nurbs_basefunctions!(cv)
+        reinit!(cv, Xᵇ)
 
         @timeit "integrate" A += _compute_igashell_weak_boundary_condition!(cv, Xᵇ, wb.prescribed_displacement, wb.components, faceidx, state.t, ke, fe, ue, wb.penalty, getwidth(layerdata(igashell)))
         
-        system_arrays.fᵉ[celldofs] += fe
-        system_arrays.Kᵉ[celldofs, celldofs] += ke
+        state.system_arrays.fᵉ[celldofs] += fe
+        state.system_arrays.Kᵉ[celldofs, celldofs] += ke
         #@show celldofs[(fe .≈ 0.0).==false]
     end
 
