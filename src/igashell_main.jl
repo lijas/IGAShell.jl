@@ -46,7 +46,6 @@ ooplane_order(igashell::IGAShell{dim_p,dim_s}) where {dim_p,dim_s} = igashell.la
 
 layer_thickness(igashell::IGAShell{dim_p,dim_s}, ilay::Int) where {dim_p,dim_s} = igashell.layerdata.zcoords[ilay+1] - igashell.layerdata.zcoords[ilay]
 
-material(igashell::IGAShell) = igashell.layerdata.layer_materials
 interface_material(igashell::IGAShell) = igashell.layerdata.interface_material
 
 ndofs_per_controlpoint(igashell::IGAShell{dim_p,dim_s}, state::CELLSTATE) where {dim_p,dim_s} = ndofs_per_controlpoint(ooplane_order(igashell), 
@@ -79,15 +78,19 @@ function _igashell_input_checks(data::IGAShellData, cellset::AbstractVector{Int}
     #etc...
 end
 
-function IGAShell(cellset::AbstractVector{Int}, cell_connectivity::Matrix{Int}, data::IGAShellData{dim_p,dim_s,T}) where {dim_p,dim_s,T}
+function IGAShell(;
+    cellset::AbstractVector{Int}, 
+    connectivity::Matrix{Int},
+    data::IGAShellData{dim_p,dim_s,T}
+    ) where {dim_p,dim_s,T}
 
-    _igashell_input_checks(data, cellset, cell_connectivity)
+    _igashell_input_checks(data, cellset, connectivity)
 
     ncells = length(cellset)
-    ncontrol_points = maximum(cell_connectivity)
+    ncontrol_points = maximum(connectivity)
 
     #Setup adaptivity structure
-    adapdata = IGAShellAdaptivity(data, cell_connectivity, ncells, ncontrol_points)
+    adapdata = IGAShellAdaptivity(data, connectivity, ncells, ncontrol_points)
 
     #
     Ce_mat, _ = IGA.compute_bezier_extraction_operators(data.orders[1:dim_p]..., data.knot_vectors[1:dim_p]...)
@@ -491,7 +494,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                 @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
                                                     cv, 
                                                     ke, fe, 
-                                                    material(igashell), states, ⁿstates, 
+                                                    getmaterial(layerdata(igashell)), states, ⁿstates, 
                                                     ue_layer, ilay, nlayers(igashell), active_dofs, 
                                                     is_small_deformation_theory(layerdata(igashell)), getwidth(layerdata(igashell)))
             

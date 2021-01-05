@@ -4,6 +4,8 @@ export VertexInterfaceIndex, EdgeInterfaceIndex
 
 using Five
 using IGA
+using LinearAlgebra
+using SparseArrays
 using StaticArrays
 using TimerOutputs
 

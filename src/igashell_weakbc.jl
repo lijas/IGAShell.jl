@@ -20,7 +20,7 @@ function IGAShellWeakBC(;
     
     @assert( length(components) == length(prescribed_displacement(zero(Vec{dim_s,T}), 0.0)) )
 
-    return IGAShellWeakBC{typeof(igashell)}(collect(faceset), prescribed_displacement, components, Base.RefValue(igashell), penalty)
+    return IGAShellWeakBC{typeof(igashell)}(collect(faceset), func, comps, Base.RefValue(igashell), penalty)
 end
 
 #TODO: combine igashell_external_force_with igashellweakbc

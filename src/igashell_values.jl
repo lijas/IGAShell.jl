@@ -135,7 +135,7 @@ getnquadpoints_ooplane(cv::IGAShellValues) = return length(cv.oqr.weights)
 getnquadpoints_inplane(cv::IGAShellValues) = return length(cv.iqr.weights)
 JuAFEM.getnquadpoints(cv::IGAShellValues) = return getnquadpoints_ooplane(cv)*getnquadpoints_inplane(cv)
 
-getnbasefunctions_inplane(cv::IGAShellValues) = return size(cv.N, 1)
+getnbasefunctions_inplane(cv::IGAShellValues) = return size(cv.inplane_values_bezier.N, 1)
 getnbasefunctions_ooplane(cv::IGAShellValues, i::Int) = return getnbasefunctions(cv.H[i])
 JuAFEM.getnbasefunctions(cv::IGAShellValues) = return cv.nbasisfunctions[]
 
@@ -475,19 +475,9 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
     @assert JuAFEM.getdim(mid_ip) == dim_p
 
     # Function interpolation
-    n_mid_ip_basefuncs = getnbasefunctions(mid_ip)
-    N    = fill(zero(T)      * T(NaN), n_mid_ip_basefuncs, n_inp_qp)
-    dNdξ = fill(zero(Vec{dim_p,T}) * T(NaN), n_mid_ip_basefuncs, n_inp_qp)
-    dN²dξ² = fill(zero(Tensor{2,dim_p,T}) * T(NaN), n_mid_ip_basefuncs, n_inp_qp)
-
+    inplane_values_bezier = BasisValues(qr_inplane, mid_ip)
+    
     H = [BasisValues{1,T}() for _ in 1:n_midplane_basefuncs]
-
-    for (qp, ξ) in enumerate(qr_inplane.points)
-        basefunc_count = 1
-        for basefunc in 1:n_midplane_basefuncs
-            dN²dξ²[basefunc, qp], dNdξ[basefunc, qp], N[basefunc, qp] = hessian(ξ -> JuAFEM.value(mid_ip, basefunc, ξ), ξ, :all)
-        end
-    end
 
     G  = [zero(Triad{dim_s,T}) for _ in 1:nqp]
     Gᴵ = [zero(Triad{dim_s,T}) for _ in 1:nqp]
@@ -497,7 +487,7 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
     Eₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
     Dₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
 
-    max_nbasefunctions = n_mid_ip_basefuncs*dim_s * sizehint #hardcoded
+    max_nbasefunctions = n_midplane_basefuncs*dim_s * sizehint #hardcoded
     U = fill(zero(Tensor{1,dim_s,T}) * T(NaN), max_nbasefunctions, nqp)
     dUdξ = fill(zero(Tensor{2,dim_s,T}) * T(NaN), max_nbasefunctions, nqp)
     d²Udξ² = fill(zeros(dim_s,dim_s,dim_s) * T(NaN), max_nbasefunctions, nqp) 
@@ -505,7 +495,7 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
     detJdV = fill(T(NaN), nqp)
     detJdA = fill(T(NaN), nqp)
 
-    MM1 = Tensors.n_components(Tensors.get_base(eltype(dN²dξ²)))
+    MM1 = Tensors.n_components(Tensors.get_base(eltype(κ)))
     MM2 = Tensors.n_components(Tensors.get_base(eltype(dUdξ)))
 
     #combine the two quadrature rules
@@ -522,10 +512,9 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
     qr = QuadratureRule{dim_s,RefCube,T}(weights, points)
 
     #Initalize bezier operator as NaN
-    bezier_operator = IGA.bezier_extraction_to_vector(sparse(Diagonal(fill(NaN, n_mid_ip_basefuncs))))
+    bezier_operator = IGA.bezier_extraction_to_vector(sparse(Diagonal(fill(NaN, n_midplane_basefuncs))))
 
-    return IGAShellValues{dim_s,dim_p,T,MM1,MM2}(N, dNdξ, dN²dξ², H, detJdV, detJdA, G, Gᴵ, Eₐ, Dₐ, κ, κᵐ, R, U, dUdξ, d²Udξ², 
-                                                 similar(U), similar(dUdξ), similar(d²Udξ²), Ref(max_nbasefunctions), Ref(bezier_operator), qr, 
+    return IGAShellValues{dim_s,dim_p,T,MM1,MM2}(inplane_values_bezier, deepcopy(inplane_values_bezier), H, detJdV, detJdA, G, Gᴵ, Eₐ, Dₐ, κ, κᵐ, R, U, dUdξ, Ref(max_nbasefunctions), Ref(bezier_operator), qr, 
                                                  deepcopy(qr_inplane), deepcopy(qr_ooplane), thickness, mid_ip, oop_ip)
 end
 

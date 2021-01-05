@@ -1,3 +1,4 @@
+export IGAShellData
 
 """
 
@@ -196,8 +197,8 @@ end
 """
 
 """
-struct IGAShellData{dim_p,dim_s,T,LM<:Five.LayeredMaterial,IM<:Five.AbstractCohesiveMaterial}
-    layer_materials::LM
+struct IGAShellData{dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial}
+    layer_materials::Vector{LM}
     interface_material::IM
     viscocity_parameter::T
     orders::NTuple{dim_s,Int}
@@ -217,7 +218,7 @@ struct IGAShellData{dim_p,dim_s,T,LM<:Five.LayeredMaterial,IM<:Five.AbstractCohe
 end
 
 function IGAShellData(;
-    layer_materials::LM,
+    layer_materials::Vector{LM},
     interface_material::IM,
     orders::NTuple{dim_s,Int},
     knot_vectors::NTuple{dim_p,Vector{T}},
@@ -227,13 +228,13 @@ function IGAShellData(;
     nqp_ooplane_per_layer::Int,
     viscocity_parameter::T                  = 0.0,
     width::T                                = 1.0, #Only used in 2d,
-    nlayers::Int                            = nlayers(layer_materials),
+    nlayers::Int                            = length(layer_materials),
     zcoords::Vector{T}                      = collect(-thickness/2:(thickness/nlayers):thickness/2),
     initial_interface_damages::Matrix{T}    = zeros(Float64, nlayers-1, length(initial_cellstates)),
     adaptable::Bool                         = false,
     LIMIT_UPGRADE_INTERFACE::T              = 0.01,
     small_deformations_theory::Bool         = false,
-    nqp_interface_order::Int                = nqp_inplane_order) where {dim_p,dim_s,T,LM<:Five.LayeredMaterial,IM<:Five.AbstractCohesiveMaterial}
+    nqp_interface_order::Int                = nqp_inplane_order) where {dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial}
 
     #-----
     ninterfaces = nlayers-1
