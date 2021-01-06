@@ -49,7 +49,7 @@ function initial_upgrade_of_dofhandler(dh::MixedDofHandler, igashell::IGAShell)
         if cellnode_states != initial_cellnode_states
             ndofs = ndofs_per_cell(dh, cellid)
 
-            instr = construct_upgrade_instruction(igashell, cellid, initial_cellnode_states, cellnode_states, zeros(Float64, ndofs), zeros(Float64, ndofs), zeros(Float64, ndofs), zeros(Float64, ndofs))
+            instr = construct_upgrade_instruction(igashell, cellid, initial_cellnode_states, cellnode_states, zeros(Float64, ndofs), zeros(Float64, ndofs))
             push!(instructions, instr)
         end
 

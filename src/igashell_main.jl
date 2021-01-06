@@ -417,16 +417,15 @@ function interface_displacements(igashell::IGAShell, iint::Int, ue::Vector{T}, X
 
 end
 
-
 @enum IGASHELL_ASSEMBLETYPE IGASHELL_FORCEVEC IGASHELL_STIFFMAT IGASHELL_FSTAR IGASHELL_DISSIPATION
 
 function Five.assemble_fstar!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_FSTAR)
 end
 
-#=function Five.assemble_dissipation!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
+function Five.assemble_dissipation!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_DISSIPATION)
-end=#
+end
 
 
 function Five.assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables) 
@@ -587,7 +586,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                                                             Δt,
                                                             iint, ninterfaces(igashell),
                                                             active_dofs, getwidth(layerdata(igashell))) 
-                    system_arryas.fⁱ[celldofs[active_dofs]] += ife
+                    state.system_arryas.fⁱ[celldofs[active_dofs]] += ife
             elseif assemtype == IGASHELL_DISSIPATION
                 ge = Base.RefValue(zero(T))
                 @timeit "integrate_cohesive_dissi" integrate_dissipation!(
@@ -600,8 +599,8 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                                                             Δt,
                                                             iint, ninterfaces(igashell),
                                                             active_dofs, getwidth(layerdata(igashell))) 
-                system_arrays.G[] += ge[]
-                system_arrays.fᴬ[celldofs[active_dofs]] += ife
+                state.system_arrays.G[] += ge[]
+                state.system_arrays.fᴬ[celldofs[active_dofs]] += ife
             else
                 error("wrong option")
             end
@@ -631,7 +630,7 @@ function assemble_massmatrix!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell
 
 end
 
-function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s}, states) where {dim_s, dim_p}
+function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {dim_s, dim_p, T}
     #if dim_s == 2
     #    return
     #end
@@ -653,7 +652,10 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s}, states) where {dim
         #Data for cell
         _celldofs = celldofs(dh, cellid)
         ue = states.d[_celldofs]
-        X = cellcoords(dh, cellid)
+
+        nnodes = JuAFEM.nnodes_per_cell(igashell)
+        X = zeros(Vec{dim_s,T}, nnodes)
+        JuAFEM.cellcoords!(X, dh, cellid)
         Xᵇ= IGA.compute_bezier_points(Ce, X)
         celldata = (celldofs = _celldofs, 
                     Xᵇ=Xᵇ, X=X, ue=ue, 
@@ -849,7 +851,7 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
         
         #constitutive_driver
         t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
-        new_materialstate[qp-qp_offset] = new_matstate
+        materialstate[qp-qp_offset] = new_matstate
 
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
@@ -920,7 +922,6 @@ function integrate_cohesive_fstar!(
         
         #constitutive_driver
         t̂, ∂t∂Ĵ, new_matstate = constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
-        new_materialstate[qp-qp_offset] = new_matstate
 
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
@@ -970,10 +971,19 @@ function integrate_dissipation!(
         R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs)
         dΓ *= width
         
+        u₊ = zero(Vec{dim_s,T}); u₋ = zero(Vec{dim_s,T}) 
+        for (i,j) in enumerate(active_dofs)
+            u₊ += cv_top.N[j,qp] * ue[i]
+            u₋ += cv_bot.N[j,qp] * ue[i]
+        end
+
+        J = u₊ - u₋
+        Ĵ = R'⋅J
+
         # The constitutive_driver calucaleted the dissipation and dgdJ in the internal force integration loop
         # and stored it in the state variable...
-        g = new_materialstate[qp-qp_offset].g
-        dgdJ =  R ⋅ new_materialstate[qp-qp_offset].dgdJ
+        g, dgdĴ = Five.constitutive_driver_dissipation(material, Ĵ, new_materialstate[qp-qp_offset])
+        dgdJ =  R ⋅ dgdĴ
 
         ge[] += g * dΓ
         for i in 1:ndofs
@@ -1060,11 +1070,11 @@ function Five.get_vtk_grid(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim
     return igashell.vtkdata.cls, igashell.vtkdata.node_coords
 end
 
-function Five.commit_part!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s}, state::StateVariables, prev_state::StateVariables, system_arrays::SystemArrays) where {dim_p,dim_s}
+function Five.commit_part!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s}, state::StateVariables) where {dim_p,dim_s}
     
     if !is_adaptive(igashell)
         return FieldDimUpgradeInstruction[]
     end
     
-    _commit_part!(dh, igashell, state, prev_state, system_arrays)
+    _commit_part!(dh, igashell, state)
 end

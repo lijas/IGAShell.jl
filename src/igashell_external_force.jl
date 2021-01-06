@@ -1,3 +1,4 @@
+export IGAShellExternalForce
 #
 #
 #
@@ -7,14 +8,22 @@ struct IGAShellExternalForce{P<:IGAShell} <: Five.AbstractExternalForce
     igashell::Base.RefValue{P}
 end
 
-function IGAShellExternalForce(cellset, traction::Function, igashell::IGAShell)
+function IGAShellExternalForce(; 
+    set, 
+    func::Function, 
+    igashell::IGAShell)
 
-    return IGAShellExternalForce{typeof(igashell)}(collect(cellset), traction, Base.RefValue(igashell))
+    return IGAShellExternalForce{typeof(igashell)}(collect(set), func, Base.RefValue(igashell))
 end
 
-function Five.apply_external_force!(dh::JuAFEM.AbstractDofHandler, ef::IGAShellExternalForce{P}, state::StateVariables, prev_state::StateVariables, system_arrays::SystemArrays{T}, globaldata) where {P,T}
+function Five.init_external_force!(a::IGAShellExternalForce, ::JuAFEM.AbstractDofHandler)
+    return a
+end
+
+function Five.apply_external_force!(ef::IGAShellExternalForce{P}, state::StateVariables{T}, globaldata) where {P,T}
     
     #Igashell extract
+    dh = globaldata.dh
     igashell = ef.igashell[]
     dim_s = JuAFEM.getdim(igashell)
 
@@ -52,7 +61,7 @@ function Five.apply_external_force!(dh::JuAFEM.AbstractDofHandler, ef::IGAShellE
         
         @timeit "integrate" A += _compute_igashell_external_traction_force!(cv, Xᵇ, traction, faceidx, state.t, fe, getwidth(layerdata(igashell)))
        
-        system_arrays.fᵉ[celldofs] += fe
+        state.system_arrays.fᵉ[celldofs] += fe
     end
 
 end

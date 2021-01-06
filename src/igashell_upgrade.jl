@@ -1,8 +1,7 @@
 
 function _commit_part!(dh::JuAFEM.AbstractDofHandler, 
                       igashell::IGAShell{dim_p,dim_s}, 
-                      state::StateVariables, prev_state::StateVariables, 
-                      system_arrays::SystemArrays) where {dim_p,dim_s}
+                      state::StateVariables) where {dim_p,dim_s}
 
     instructions = FieldDimUpgradeInstruction[]
     upgraded_cells = Int[]
@@ -40,9 +39,7 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
     for (ic, cellid) in enumerate(igashell.cellset)
         _celldofs = JuAFEM.celldofs(dh, cellid)
         ue = state.d[_celldofs]
-        ue_prev = prev_state.d[_celldofs]
         Δue = state.Δd[_celldofs]
-        Δue_prev = prev_state.Δd[_celldofs]
         
         cellnodes = igashell.cell_connectivity[:, ic]
         new_cellnode_states = @view node_states[cellnodes]
@@ -54,7 +51,7 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
             continue
         end
 
-        instr = construct_upgrade_instruction(igashell, cellid, current_cellnode_states, new_cellnode_states, ue, ue_prev, Δue, Δue_prev)
+        instr = construct_upgrade_instruction(igashell, cellid, current_cellnode_states, new_cellnode_states, ue, Δue)
         push!(instructions, instr)
 
         # Check if the element is mixed.
@@ -82,8 +79,8 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
     cell_upgraded = false
     new_cellstate = cellstate
 
-    τᴹ = max_traction_force(imat, 1)
-    σᴹ = max_traction_force(imat, dim_s)
+    τᴹ = Five.max_traction_force(imat, 1)
+    σᴹ = Five.max_traction_force(imat, dim_s)
 
     #
     nqp_oop_per_layer = getnquadpoints_ooplane_per_layer(igashell)
@@ -160,16 +157,14 @@ function stress_interface_index(qplayerid::Int, nqpinplane::Int, dim_p::Int)
 end
 
 function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, current_cellnode_state::AbstractVector{CELLSTATE}, cellnode_states::AbstractVector{CELLSTATE}, 
-                                      ue::Vector{T}, ue_prev::Vector{T}, Δue::Vector{T}, Δue_prev::Vector{T}) where {dim_p,dim_s,T}
+                                      ue::Vector{T}, Δue::Vector{T}) where {dim_p,dim_s,T}
 
     local_dof_idxs = Int[]
     current_fielddims = Int[]
     update_fielddims = Int[]
     cp_states = CELLSTATE[]
     extended_ue = Vector{Float64}[]
-    extended_ue_prev = Vector{Float64}[]
     extended_Δue = Vector{Float64}[]
-    extended_Δue_prev = Vector{Float64}[]
     nodeids = Int[]
 
     local_dof_idx = 1
@@ -200,12 +195,6 @@ function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid
         Δue_node = Δue[(1:current_fielddim) .+ (local_dof_idx-1)]
         Δue_extended = IGA.compute_bezier_points(C, Δue_node, dim=dim_s)
 
-        ue_prev_node = ue_prev[(1:current_fielddim) .+ (local_dof_idx-1)]
-        ue_prev_extended = IGA.compute_bezier_points(C, ue_prev_node, dim=dim_s)
-
-        Δue_prev_node = Δue_prev[(1:current_fielddim) .+ (local_dof_idx-1)]
-        Δue_prev_extended = IGA.compute_bezier_points(C, Δue_prev_node, dim=dim_s)
-
         local_dof_idx += current_fielddim
 
         push!(local_dof_idxs, local_dof_idx)
@@ -213,15 +202,13 @@ function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid
         push!(update_fielddims, update_fielddim)
         push!(cp_states, cp_state)
         push!(extended_ue, ue_extended)
-        push!(extended_ue_prev, ue_prev_extended)
         push!(extended_Δue, Δue_extended)
-        push!(extended_Δue_prev, Δue_prev_extended)
         push!(nodeids, nodeid)
     end
 
     instr = FieldDimUpgradeInstruction(cellid, nodeids, local_dof_idxs, #What cell, and what dof idx
                                         current_fielddims, update_fielddims, # number of dofs
-                                        extended_ue, extended_ue_prev, extended_Δue, extended_Δue_prev) #the new values pushed into the state vector
+                                        extended_ue, extended_Δue) #the new values pushed into the state vector
 
     return instr
 

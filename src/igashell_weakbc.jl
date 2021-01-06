@@ -24,11 +24,15 @@ function IGAShellWeakBC(;
     return IGAShellWeakBC{typeof(igashell)}(collect(set), func, collect(comps), Base.RefValue(igashell), penalty)
 end
 
-#TODO: combine igashell_external_force_with igashellweakbc
-function Five.apply_external_force!(dh::JuAFEM.AbstractDofHandler, wb::IGAShellWeakBC, state::StateVariables{T}, globaldata) where {T}
+function Five.init_external_force!(a::IGAShellWeakBC, ::JuAFEM.AbstractDofHandler)
+    return a
+end
+
+function Five.apply_external_force!(wb::IGAShellWeakBC, state::StateVariables{T}, globaldata) where {T}
     
     
     #Igashell extract
+    dh = globaldata.dh
     igashell = wb.igashell[]
     dim_s = JuAFEM.getdim(igashell)
 
