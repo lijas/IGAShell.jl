@@ -72,12 +72,12 @@ include("igashell_adaptivity.jl")
 include("igashell_sr.jl")
 include("igashell_integrationdata.jl")
 include("igashell_main.jl")
-include("igashell_vtk.jl")
 include("igashell_upgrade.jl")
 include("igashell_external_force.jl")
 #include("igashell_material.jl")
 include("igashell_weakbc.jl")
 include("igashell_utils.jl")
+include("igashell_vtk.jl")
 include("igashell_autodiff.jl")
 
 end

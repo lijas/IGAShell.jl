@@ -197,7 +197,7 @@ end
 
 Gets the cellstate in each underlying FE-mesh cell
 """
-function get_vtk_celldata(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, state::StateVariables) where {dim_p,dim_s,T}
+function Five.get_vtk_celldata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKCellOutput{<:IGAShellConfigStateOutput}, state::StateVariables, globaldata) where {dim_p,dim_s,T}
 
     vtkcellcount = 1
     nvtkcells = nvtkcells_per_layer(vtkdata(igashell)) * nlayers(igashell) * getncells(igashell) #+ 
@@ -225,7 +225,7 @@ function get_vtk_celldata(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_
         end
     end
 
-    return cellstates, "igashell_cellstates"
+    return cellstates
 
 end
 
@@ -234,7 +234,7 @@ end
 
 Gets the interface damage at the nodes by taking the mean of the damage at all quadpoints.
 """
-function get_vtk_nodedata(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, state::StateVariables) where {dim_p,dim_s,T}
+function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNodeOutput{<:Five.MaterialStateOutput}, state::StateVariables, globaldata) where {dim_p,dim_s,T}
 
     n_vtknodes_per_layer = prod(vtkdata(igashell).n_plot_points_dim)::Int
     n_vtknodes_per_cell = n_vtknodes_per_layer * nlayers(igashell)
@@ -265,6 +265,6 @@ function get_vtk_nodedata(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_
         end
     end
     
-    return vtk_node_damage, "igashell_interface_damage"
+    return vtk_node_damage
 
 end

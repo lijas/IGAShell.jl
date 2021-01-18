@@ -1,4 +1,4 @@
-
+export IGAShellConfigStateOutput
 
 function generate_cohesive_oop_quadraturerule(zcoords::Vector{T}) where {T}
     
@@ -445,46 +445,43 @@ IGAShellBCOutput
 """
 struct IGAShellBCOutput{P<:IGAShell,T} <: Five.AbstractOutput
     igashell::Base.RefValue{P}
-    time_interval::T
-    lastoutput::Base.RefValue{T}
-
-    faceset::GeometryObjectVectors
     components::Vector{Int}
-
-    forces::Vector{T}
-    displacements::Vector{T}
-    t::Vector{T}
 end
 
-function IGAShellBCOutput(part::Base.RefValue{I}; outputset, components::Vector{Int}, interval::T) where {I<:IGAShell, T}
-    @assert(!isempty(outputset))
-    @assert( maximum(components) <= 3 )
-    forces = Vector{T}()
-    displacements = Vector{T}()
+function IGAShellBCOutput(; igashell::IGAShell, comps::Vector{Int})
+    @assert( maximum(comps) <= 3 )
+    T = Float64
     
-    return IGAShellBCOutput{I,T}(part, interval, Base.RefValue(-1.0), collect(outputset), components, forces, displacements, T[])
+    return IGAShellBCOutput{typeof(igashell),T}(Base.RefValue(igashell), comps)
 end
 
-function update_output!(dh::JuAFEM.AbstractDofHandler, output::IGAShellBCOutput, state::StateVariables{T}, system_arrays::SystemArrays) where T
+function Five.build_outputdata(output::IGAShellBCOutput, set, dh::MixedDofHandler)
+    return output
+end
+
+function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}, faceset, globaldata) where T
     
+    dh = globaldata.dh 
     igashell = output.igashell[]
     dim_s = JuAFEM.getdim(igashell)
 
+    nnodes = JuAFEM.nnodes_per_cell(igashell)
+    X = zeros(Vec{dim_s,T}, nnodes)
+
     alldofs = Int[]
     maxu = 0.0
-    for (ic, faceidx) in enumerate(output.faceset)
+    for (ic, faceidx) in enumerate(faceset)
 
         cellid = faceidx[1]
         local_cellid = findfirst((i)->i==cellid, igashell.cellset)
-        _celldofs = celldofs(dh, cellid)
+        
+        _celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh, cellid))
+        JuAFEM.celldofs!(_celldofs, dh, cellid)
         ue = state.d[_celldofs]
-
-
 
         #
         # This works if the face/edge is on the boundary of the volume
         # However, if it is an internal face/edge, it will not work
-            
             #=
             local_dofs = igashelldofs(igashell, faceidx, output.components)
             facedofs = _celldofs[local_dofs]
@@ -493,8 +490,9 @@ function update_output!(dh::JuAFEM.AbstractDofHandler, output::IGAShellBCOutput,
         #
         # This approach works generally. Se what basefunctions are non-zero, and take the corresponding dofs
         Ce = get_extraction_operator(intdata(igashell), local_cellid)
-        X = cellcoords(dh, cellid)
-        Xᵇ= IGA.compute_bezier_points(Ce, X)
+        JuAFEM.cellcoords!(X, dh, cellid)
+        Xᵇ = IGA.compute_bezier_points(Ce, X)
+
         cv = build_facevalue!(igashell, faceidx)
         IGA.set_bezier_operator!(cv, Ce)
         reinit!(cv, Xᵇ)
@@ -517,11 +515,19 @@ function update_output!(dh::JuAFEM.AbstractDofHandler, output::IGAShellBCOutput,
         end
 
     end
+
     unique!(alldofs)
-    push!(output.forces, sum(system_arrays.fⁱ[alldofs]))
-    push!(output.displacements, maxu)#maximum(abs.(state.d[alldofs])))
-    push!(output.t, state.t)
+
+    return (forces        = sum(state.system_arrays.fⁱ[alldofs]),
+            displacements = maxu) # maximum(abs.(state.d[alldofs]))
+
 end
+
+"""
+IGAShellConfigStateOutput
+"""
+
+struct IGAShellConfigStateOutput <: Five.AbstractOutput end
 
 """
 IGAShellTractionForces

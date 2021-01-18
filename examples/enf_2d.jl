@@ -129,10 +129,32 @@ etf = IGAShellExternalForce(
 )
 push!(data.external_forces, etf)
 
-#=
 #
-data.outputs["forcedofs2"] = IGAShell.IGAShellBCOutput(Ref(igashell), outputset = edgeset, components = [dim], interval = 0.00)
+output = OutputData(
+    type = IgAShell.IGAShellBCOutput(
+        igashell = igashell,
+        comps = [DIM]
+    ),
+    interval = 0.0,
+    set      = edgeset
+)
+data.outputdata["reactionforce"] = output
 
+#
+vtkoutput = VTKCellOutput(
+    type = IGAShellConfigStateOutput()
+)
+Five.push_vtkoutput!(data.output[], vtkoutput)
+
+#
+vtkoutput = VTKNodeOutput(
+    type = MaterialStateOutput(
+        field = :interface_damage
+    ),
+)
+Five.push_vtkoutput!(data.output[], vtkoutput)
+
+#=
 #Stress output
 postcells = [50, 75, 90]
 stress_output = IGAShell.IGAShellStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
@@ -176,5 +198,9 @@ solver = LocalDissipationSolver(
 
 
 output = solvethis(solver, state, globaldata)
+
+d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(output.outputdata["reactionforce"].data)]
+f = [output.outputdata["reactionforce"].data[i].forces for i in 1:length(output.outputdata["reactionforce"].data)]
+
 
 

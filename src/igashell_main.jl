@@ -850,8 +850,8 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
         Ĵ = R'⋅J
         
         #constitutive_driver
-        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
-        materialstate[qp-qp_offset] = new_matstate
+        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, new_materialstate[qp-qp_offset])
+        new_materialstate[qp-qp_offset] = new_matstate
 
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
@@ -921,7 +921,7 @@ function integrate_cohesive_fstar!(
         Ĵ = R'⋅J
         
         #constitutive_driver
-        t̂, ∂t∂Ĵ, new_matstate = constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
+        t̂, ∂t∂Ĵ, new_matstate = constitutive_driver(material, Ĵ, new_materialstate[qp-qp_offset])
 
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
