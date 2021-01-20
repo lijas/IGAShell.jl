@@ -14,16 +14,8 @@ function IGAShellVTK(data::IGAShellData{dim_p,dim_s,T}) where {dim_p,dim_s,T}
     bbasis_discont = IGA.BSplineBasis(knot_discont, order)
 
     #The zcoord to plot for each layer
-    zcoords = data.zcoords
-    addon = (last(zcoords) + first(zcoords))/2
-    scale = (last(zcoords) - first(zcoords))/2
-    zcoords = (zcoords.-addon)/scale
-    zcoords = collect(Iterators.flatten(zip(zcoords.- 1e-13, zcoords)))[2:end-1] 
-    plot_points_ooplane = QuadratureRule{1,RefCube,T}(zeros(T,length(zcoords)), [Vec((z,)) for z in zcoords])
-    discont_values = BasisValues(plot_points_ooplane, bbasis_discont)
-
-    cv = IGAShellValues(data.thickness, plot_point_inplane, plot_points_ooplane, mid_ip, getnbasefunctions(bbasis_discont))
-    set_oop_basefunctions!(cv, discont_values)
+    plot_qr = generate_plot_oop_qr(data.zcoords)
+    cv = IGAShellValues(data.thickness, plot_point_inplane, plot_qr, mid_ip, bbasis_discont)
 
     return IGAShellVTK{dim_p,dim_s,T,typeof(cv)}(cv, n_plot_points_dim, Vec{dim_s,T}[], MeshCell{VTKCellType, Vector{Int}}[])
 end
@@ -59,7 +51,7 @@ function _init_vtk_grid!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p
         bezier_coords .= IGA.compute_bezier_points(Ce, coords)
         
         IGA.set_bezier_operator!(cv_plot, Ce)
-        reinit!(cv_plot, bezier_coords)
+        reinit_midsurface!(cv_plot, bezier_coords)
 
         _init_vtk_cell!(igashell, cls, node_coords, vtkdata(igashell).cell_values_plot, bezier_coords, node_offset, n_plot_points_dims)
         cellcount = length(cls)
@@ -72,9 +64,13 @@ end
 
 function _init_vtk_cell!(igashell::IGAShell{dim_p,dim_s}, cls, node_coords, cv, bezier_coords::Vector{Vec{dim_s,T}}, node_offset::Int, n_plot_points_dims) where {dim_p,dim_s,T}
 
-    for point_id in 1:getnquadpoints(cv)
-        X = spatial_coordinate(cv, point_id, bezier_coords)
-        push!(node_coords, X)
+    for ilay in 1:nlayers(igashell)
+        reinit_layer!(cv, ilay)
+        #Only loop over bottom coordinates of each layer
+        for point_id in 1:getnquadpoints_per_layer(cv)
+            X = spatial_coordinate(cv, point_id, bezier_coords)
+            push!(node_coords, X)
+        end
     end
 
     n_plot_points = prod(n_plot_points_dims)::Int
@@ -135,12 +131,11 @@ Calculates the dispalcements at the nodes of the underlying FE-mesh
 function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, state::StateVariables) where {dim_p,dim_s,T}
 
 
-    node_coords = Vec{dim_s,T}[]
     cls = MeshCell[]
     node_offset = 0
     nodes = zeros(Int, JuAFEM.nnodes_per_cell(igashell))
-    coords = zeros(Vec{dim_s,T}, JuAFEM.nnodes_per_cell(igashell))
-    bezier_coords = similar(coords)
+    X = zeros(Vec{dim_s,T}, JuAFEM.nnodes_per_cell(igashell))
+    Xᵇ = similar( X)
     cv_plot = vtkdata(igashell).cell_values_plot
     node_disps = Vec{dim_s,T}[]
     celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh,1))
@@ -148,14 +143,18 @@ function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGA
         
         Ce = get_extraction_operator(intdata(igashell), ic)
         
+        #Reinit cellvalues
         IGA.set_bezier_operator!(cv_plot, Ce)
-        reinit!(cv_plot, bezier_coords)
+        JuAFEM.cellcoords!(X, dh, cellid)
+        Xᵇ .= IGA.compute_bezier_points(Ce, X)
+        reinit_midsurface!(cv_plot, Xᵇ)
 
         #Get displacement for this cell
         ndofs = JuAFEM.ndofs_per_cell(dh,cellid)
         resize!(celldofs, ndofs)
         JuAFEM.celldofs!(celldofs, dh, cellid)
         ue = state.d[celldofs]
+        
 
         #Transform displayements to fully discontinuous state
         cellconectivity!(nodes, igashell, ic)
@@ -181,9 +180,13 @@ function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGA
             offset += _ndofs
         end
 
-        @timeit "funcvalue" for point_id in 1:getnquadpoints(cv_plot)
-            u = function_value(cv_plot, point_id, ue_bezier)
-            push!(node_disps, u)
+        active_layer_dofs = igashell.integration_data.cache_values.active_layer_dofs_discont
+        for ilay in 1:nlayers(igashell)
+            reinit_layer!(cv_plot, ilay)
+            for point_id in 1:getnquadpoints_per_layer(cv_plot)
+                ncoord = function_value(cv_plot, point_id, ue_bezier[active_layer_dofs[ilay]])
+                push!(node_disps, ncoord)
+            end
         end
 
     end

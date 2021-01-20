@@ -470,15 +470,15 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
 
     alldofs = Int[]
     maxu = 0.0
-    for (ic, faceidx) in enumerate(faceset)
-
+    for faceidx in faceset
+        
         cellid = faceidx[1]
         local_cellid = findfirst((i)->i==cellid, igashell.cellset)
         
         _celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh, cellid))
         JuAFEM.celldofs!(_celldofs, dh, cellid)
-        ue = state.d[_celldofs]
-
+        
+        cellstate = getcellstate(adapdata(igashell), local_cellid)
         #
         # This works if the face/edge is on the boundary of the volume
         # However, if it is an internal face/edge, it will not work
@@ -495,23 +495,35 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
 
         cv = build_facevalue!(igashell, faceidx)
         IGA.set_bezier_operator!(cv, Ce)
-        reinit!(cv, Xᵇ)
 
-        for qp in 1:getnquadpoints(cv)
-            u = function_value(cv, qp, ue)
-            for d in output.components
-                maxu = max(maxu, abs(u[d]))
-            end
-        end
+        active_layerdofs = build_active_layer_dofs(igashell, cellstate)
+        reinit_midsurface!(cv, Xᵇ)
 
-        #Loop through all basefunctions
-        for dof in 1:getnbasefunctions(cv) ÷ dim_s
-            #Check if it is not zero
-            if !(basis_value(cv, 1, (dof-1)*dim_s + 1)[1] ≈ 0.0)
+        for ilay in 1:nlayers(igashell)
+
+            reinit_layer!(cv, ilay)
+
+            layerdofs = _celldofs[active_layerdofs[ilay]]
+            ue = state.d[layerdofs]
+
+            for qp in 1:getnquadpoints_per_layer(cv)
+               
+                u = function_value(cv, qp, ue)
                 for d in output.components
-                    push!(alldofs, _celldofs[(dof-1)*dim_s + d])
+                    maxu = max(maxu, abs(u[d]))
+                end
+                
+                #Loop through all basefunctions
+                for dof in 1:getngeombasefunctions_per_layer(cv)
+                    #Check if it is not zero
+                    if !(basis_value(cv, qp, (dof-1)*dim_s + 1)[1] ≈ 0.0)
+                        for d in output.components
+                            push!(alldofs, _celldofs[(dof-1)*dim_s + d])
+                        end
+                    end
                 end
             end
+
         end
 
     end

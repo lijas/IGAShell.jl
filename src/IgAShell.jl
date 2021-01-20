@@ -47,8 +47,12 @@ GeometryObjectVectors
 const GeometryObjectVectors = Union{Array{Int,1}, Array{EdgeIndex,1}, Array{FaceIndex,1}, Array{VertexIndex,1}, Array{EdgeInterfaceIndex,1}, Array{VertexInterfaceIndex,1}}
 const GeometryObject = Union{Int, EdgeIndex, FaceIndex, VertexIndex, EdgeInterfaceIndex, VertexInterfaceIndex}
 
+getcellid(index::GeometryObject) = index[1]
+getidx(index::GeometryObject) = index[2]
+
 include("higherorderlagrange.jl") #TODO: Move to sperate package instead
 
+include("igashell_utils2.jl")
 include("igashell_values.jl") 
 include("igashell_data.jl")
 

@@ -59,7 +59,7 @@ Base.:(<)(a::CELLSTATE, b::CELLSTATE) = a.state < b.state
 
 @inline function is_interface_active(state::CELLSTATE, iint::Int)
     is_fully_discontiniuos(state) && return true
-    !is_discontiniuos(state) && return false
+    #!is_discontiniuos(state) && return false
     
     interface_bit = ((state.state2 >> (iint-1)) & Int(1))
     return 1 == interface_bit
@@ -85,14 +85,16 @@ function insert_interface(state::CELLSTATE, iint::Int, ninterfaces::Int)
 end
 
 function combine_states(a::CELLSTATE, b::CELLSTATE, ninterface::Int)
+    @assert(!is_mixed(b) || !is_mixed(a))
+
     new_state = max(a.state, b.state)
     new_state2 = a.state2 | b.state2
 
-    if new_state == _LUMPED
+    #=if new_state == _LUMPED
         new_state = _WEAK_DISCONTINIUOS
     elseif new_state == _LAYERED
         new_state = _STRONG_DISCONTINIUOS
-    end
+    end=#
 
     #Check if number of active interfaces are equal to fully_discontinous state
     new_state = (new_state2 >= 2^ninterface-1) ? _FULLY_DISCONTINIUOS : new_state
@@ -124,7 +126,7 @@ function generate_knot_vector(state::CELLSTATE, order::Int, ninterfaces::Int)
     end
 end
 
-function get_active_basefunction_in_layer(ilay::Int, order::Int, state::CELLSTATE)
+function get_active_basefunctions_in_layer(ilay::Int, order::Int, state::CELLSTATE)
     if state.state == _LUMPED
         return 1:(order+1)
     elseif state.state == _LAYERED
@@ -145,12 +147,33 @@ function get_active_basefunction_in_layer(ilay::Int, order::Int, state::CELLSTAT
     end
 end
 
+function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CELLSTATE)
+    if state.state == _LUMPED
+        return []
+    elseif state.state == _LAYERED
+        return []
+    elseif is_fully_discontiniuos(state)
+        return int:(iint+1) .+ (order)*(iint)
+    elseif is_discontiniuos(state)
+        addon = is_strong_discontiniuos(state) ? order : 0
+        offset = 0
+        for i in 1:iint-1
+            if is_interface_active(state, i) #Discontiniuos
+                offset += order+1
+            else #Lumped
+                offset += addon
+            end
+        end
+        (1:2) .+ offset
+    end
+end
+
 function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, states::Vector{CELLSTATE})
     active_layer_dofs = [Int[] for _ in 1:nlayers]
     dof_offset = 0
     for cp_state in states
         for ilay in 1:nlayers
-            for ib in get_active_basefunction_in_layer(ilay, order, cp_state)
+            for ib in get_active_basefunctions_in_layer(ilay, order, cp_state)
                 for d in 1:dim_s
                     push!(active_layer_dofs[ilay], (ib-1)*dim_s + d + dof_offset)
                 end
@@ -242,30 +265,10 @@ function IGAShellData(;
     @assert(size(initial_interface_damages)[1] == ninterfaces)
     @assert(size(initial_interface_damages)[2] == ncells)
     dim_s == 3 && @assert(width == 1.0)
-    @show nqp_ooplane_per_layer
+    
     return IGAShellData(layer_materials, interface_material, viscocity_parameter, orders, knot_vectors, thickness, width, nlayers, zcoords, initial_cellstates, initial_interface_damages, adaptable, LIMIT_UPGRADE_INTERFACE, small_deformations_theory, nqp_inplane_order, nqp_ooplane_per_layer, nqp_interface_order)
 
 end
-
-#=function IGAShellData{dim_s}(mat::LM, imat::IM, viscocity_parameter::T, orders, knot_vectors, thickness::T, width::T, nlayers::Int, cellstate::Vector{CELLSTATE}, initial_interface_damages::Matrix{T}, adaptable::Bool,small_deformations_theory::Bool, LIMIT_UPGRADE_INTERFACE::T, qp_inplane_order, nqp_ooplane_per_layer, nqp_interface) where {dim_s,LM<:AbstractMaterial,IM,T}
-    ninterfaces = nlayers-1
-    ncells = length(cellstate)
-    @assert(size(initial_interface_damages)[1] == ninterfaces)
-    @assert(size(initial_interface_damages)[2] == ncells)
-    dim_s == 3 && @assert(width == 1.0)
-
-    dim_p = dim_s-1
-    zcoords = collect(-thickness/2:(thickness/nlayers):thickness/2)
-    return IGAShellData{dim_p,dim_s,T,LM,IM}(
-        mat, imat, viscocity_parameter,
-        orders, knot_vectors,
-        zcoords, thickness, width, nlayers,
-        cellstate,
-        initial_interface_damages, 
-        adaptable, small_deformations_theory, LIMIT_UPGRADE_INTERFACE,
-        qp_inplane_order, nqp_ooplane_per_layer, nqp_interface     
-    )
-end=#
 
 nlayers(data::IGAShellData) = data.nlayers
 JuAFEM.getncells(data::IGAShellData) = length(data.initial_cellstates)

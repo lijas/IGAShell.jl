@@ -44,6 +44,38 @@ function _calculate_x(ip::Tuple{Interpolation, Vector{Interpolation}, IGA.Bezier
     return X + u
 end
 
+function _calculate_basefunc(ip::Tuple{Interpolation, Vector{Interpolation}, IGA.BezierExtractionOperator}, ib::Int, ξ::Vec{dim_s,T2}) where {dim_s,T2}
+
+    msip = ip[1]
+    opip = ip[2]
+    Ce = ip[3]
+
+    dim_p = dim_s-1
+
+    ξ2 = Vec((ξ[1:dim_p]...,))
+    ζ = Vec((ξ[dim_s]))
+
+    N = T2[]
+    B = [JuAFEM.value(msip, i, ξ2) for i in 1:getnbasefunctions(msip)]
+
+    basefunc_count = 0
+    for i in 1:getnbasefunctions(msip)
+        for j in 1:getnbasefunctions(opip[i])
+            for d in 1:dim_s
+                basefunc_count += 1
+                if basefunc_count == ib
+                    basevec = eᵢ(Vec{dim_s, Float64}, d)
+                    S = sum(Ce[i] .* B)
+                    H = JuAFEM.value(opip[i], j, ζ)
+                    return S * H * basevec
+                end
+            end
+        end
+    end
+
+    error("Error")
+end
+
 function _calculate_u(ip::Tuple{Interpolation, Vector{Interpolation}, IGA.BezierExtractionOperator}, ue::AbstractVector{T}, ξ::Vec{dim_s,T2}) where {dim_s,T,T2}
     
     msip = ip[1]
