@@ -190,7 +190,7 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
     
     # Inplane shape values
     inplane_values_bezier = BasisValues(qr_inplane, mid_ip)
-    
+
     #Out of plane shape values
     ooplane_values = [BasisValues{1,T}() for i in 1:n_midplane_basefuncs, j in 1:nlay]
     for ib in 1:n_midplane_basefuncs
@@ -324,7 +324,8 @@ end=#
 function set_ooplane_basefunctions!(cv::IGAShellValues{dim_s,dim_p,T}, ooplane_basisvalues::Vector{OOPBasisValues{T}}) where {dim_s,dim_p,T}
     
     @assert length(ooplane_basisvalues) == getngeombasefunctions_inplane(cv)
-    
+    @assert length(first(ooplane_basisvalues)) == nlayers(cv.oqr)
+
     for i in 1:length(ooplane_basisvalues)
         layer_values = ooplane_basisvalues[i]
         for ilay in 1:length(ooplane_basisvalues[i])
@@ -530,10 +531,9 @@ function reinit_layer!(cv::IGAShellValues, ilay::Int)
     return nothing
 end
 
-get_oop_qp_weight(cv::IGAShellValues, oqp::Int) = cv.oqr.weights[oqp]
+get_qp_weight(cv::IGAShellValues, oqp::Int) = cv.qr.qrs[get_current_layer(cv)].weights[oqp]
+get_oop_qp_weight(cv::IGAShellValues, oqp::Int) = cv.oqr.qrs[get_current_layer(cv)].weights[oqp]
 get_iop_qp_weight(cv::IGAShellValues, iqp::Int) = cv.iqr.weights[iqp]
-
-
 
 function function_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{T}, Θ::Int) where {dim_s,dim_p,T}
     grad = zero(Vec{dim_s,T})

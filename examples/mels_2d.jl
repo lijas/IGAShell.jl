@@ -26,7 +26,7 @@ data = ProblemData(
 
 #interfacematerial = IGAShell.MatCohesive{dim}(λ_0,λ_f,τ,K)
 interfacematerial = MatCZBilinear(
-    K    = 1.0e5,
+    K    = 1.0e4,
     Gᴵ   = (1050/1000, 1050/1000, 211.0/1000 ),
     τᴹᵃˣ = 0.5.*(90.0, 90.0, 60.0),
     η    = 1.6

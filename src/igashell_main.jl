@@ -167,8 +167,8 @@ function build_cohesive_cellvalue!(igashell, cellid::Int)
 
     oop_cohesive_top_values, oop_cohesive_bot_values = _build_oop_cohesive_basisvalue!(igashell, cellid)
 
-    set_oop_basefunctions!(cv_top, oop_cohesive_top_values)
-    set_oop_basefunctions!(cv_bot, oop_cohesive_bot_values)
+    set_ooplane_basefunctions!(cv_top, oop_cohesive_top_values)
+    set_ooplane_basefunctions!(cv_bot, oop_cohesive_bot_values)
     
     return cv_top, cv_bot
 end
@@ -241,8 +241,8 @@ function build_facevalue!(igashell, vertex::VertexInterfaceIndex)
     basisvalues_inplane = cached_vertex_basisvalues(intdata(igashell), vertexid)
     
     set_quadraturerule!(cv, get_face_qr(intdata(igashell), face))
-    set_inp_basefunctions!(cv, basisvalues_inplane)
-    set_oop_basefunctions!(cv, oop_values) 
+    set_inplane_basefunctions!(cv, basisvalues_inplane)
+    set_ooplane_basefunctions!(cv, oop_values) 
 
     return cv
 end  
@@ -255,13 +255,24 @@ function build_active_layer_dofs(igashell::IGAShell, cellstate::CELLSTATE)
         return intdata(igashell).cache_values.active_layer_dofs_layered
     elseif is_fully_discontiniuos(cellstate)
         return intdata(igashell).cache_values.active_layer_dofs_discont
-    elseif is_mixed(cellstate)
-        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), dim_s, states)
     else
-        error("wrong cellstate")
+        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), dim_s, states)
     end
 
-    return intdata(igashell).active_layer_dofs
+
+end
+
+function build_active_interface_dofs(igashell::IGAShell, cellstate::CELLSTATE)
+
+    if is_lumped(cellstate)
+        return intdata(igashell).cache_values.active_interface_dofs_lumped, intdata(igashell).cache_values.active_inplane_interface_dofs_lumped
+    elseif is_layered(cellstate)
+        return intdata(igashell).cache_values.active_interface_dofs_layered, intdata(igashell).cache_values.active_inplane_interface_dofs_layered
+    elseif is_fully_discontiniuos(cellstate)
+        return intdata(igashell).cache_values.active_interface_dofs_discont, intdata(igashell).cache_values.active_inplane_interface_dofs_discont
+    else
+        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), dim_s, states)
+    end
 
 end
 
@@ -295,8 +306,8 @@ function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cell
     cellconectivity = cellconectivity!(cellnodes, igashell, cellid)
 
     #..
-    oop_cohesive_top_values = BasisValues{1,T,1}[]
-    oop_cohesive_bot_values = BasisValues{1,T,1}[]
+    oop_cohesive_top_values = OOPBasisValues{T}[]
+    oop_cohesive_bot_values = OOPBasisValues{T}[]
 
     for (i, nodeid) in enumerate(cellconectivity)
         cp_state = get_controlpoint_state(adapdata(igashell), nodeid)
@@ -339,6 +350,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
     X = zeros(Vec{dim_s,T}, nnodes)
     Xᵇ = similar(X)
     layerdofs = zeros(Int, nlayerdofs)
+    celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh, 1))
     fe = zeros(T, nlayerdofs)
     ke = zeros(T, nlayerdofs, nlayerdofs)
     ue = zeros(T, nlayerdofs)
@@ -359,8 +371,8 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         JuAFEM.cellcoords!(X, dh, cellid)
         Xᵇ .= IGA.compute_bezier_points(C, X)
 
-        celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh, cellid))
-        celldofs!(celldofs, dh, cellid)
+        resize!(celldofs, JuAFEM.ndofs_per_cell(dh,cellid))
+        JuAFEM.celldofs!(celldofs, dh, cellid)
 
         ⁿmaterialstates = state.prev_partstates[ic].materialstates
         materialstates = state.partstates[ic].materialstates
@@ -405,51 +417,56 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         cv_cohesive_top, cv_cohesive_bot = build_cohesive_cellvalue!(igashell, ic) 
 
         active_layerdofs = build_active_layer_dofs(igashell, cellstate) 
-        
+        active_interfacedofs, local_interface_dofs = build_active_interface_dofs(igashell, cellstate)
+
         ⁿinterfacestates = state.prev_partstates[ic].interfacestates
         interfacestates = state.partstates[ic].interfacestates
 
-        ndofs = JuAFEM.ndofs_per_cell(dh,cellid)
-        resize!(celldofs, ndofs)
+        resize!(celldofs, JuAFEM.ndofs_per_cell(dh,cellid))
 
         JuAFEM.cellcoords!(X, dh, cellid)
         JuAFEM.celldofs!(celldofs, dh, cellid)
         
         Xᵇ .= IGA.compute_bezier_points(Ce, X)
        
-        reinit_midsurface!(czv_top, Xᵇ)
-        reinit_midsurface!(czv_bot, Xᵇ)
+        IGA.set_bezier_operator!(cv_cohesive_top, Ce)
+        IGA.set_bezier_operator!(cv_cohesive_bot, Ce)
+
+        reinit_midsurface!(cv_cohesive_top, Xᵇ)
+        reinit_midsurface!(cv_cohesive_bot, Xᵇ)
         for iint in 1:ninterfaces(igashell)      
 
-            active_dofs = get_active_interface_dofs(intdata(igashell), iint)
-
-            reinit_layer!(czv_bot, iint)
-            reinit_layer!(czv_top, iint+1)
-            build_nurbs_basefunctions!(czv_bot)
-            build_nurbs_basefunctions!(czv_top)
+            reinit_layer!(cv_cohesive_top, iint+1)
+            reinit_layer!(cv_cohesive_bot, iint)
             
             ⁿstates =  @view ⁿinterfacestates[:, iint]
             states = @view interfacestates[:, iint]
 
-            ue_bot = state.d[active_layerdofs[iint]]
-            ue_top = state.d[active_layerdofs[iint+1]]
+            top_dofs = celldofs[active_layerdofs[iint+1]]
+            bot_dofs = celldofs[active_layerdofs[iint]]
+            
+            ue_top = state.d[top_dofs]
+            ue_bot = state.d[bot_dofs]
 
-            ife = zeros(T, length(active_dofs))
-            ike = zeros(T, length(active_dofs), length(active_dofs))  
+            fe_top = zeros(T, nlayerdofs)
+            fe_bot = zeros(T, nlayerdofs)
+            ke_top = zeros(T, nlayerdofs, nlayerdofs)  
+            ke_bot = zeros(T, nlayerdofs, nlayerdofs)  
 
             if assemtype == IGASHELL_STIFFMAT
                 @timeit "integrate_cohesive" A += integrate_cohesive_forcevector_and_stiffnessmatrix!(
                                                         cv_cohesive_top, cv_cohesive_bot,
-                                                        interface_material(igashell), viscocity_parameter(layerdata(igashell)), 
-                                                        ⁿstates, states,
-                                                        ike, ife,                
-                                                        ue_interface, 
-                                                        Δue_interface, 
+                                                        interface_material(igashell), 
+                                                        states,
+                                                        ke_top, ke_bot,
+                                                        fe_top, fe_bot,                
+                                                        ue_top, ue_bot, 
                                                         Δt,
-                                                        iint, ninterfaces(igashell),
-                                                        active_dofs, getwidth(layerdata(igashell))) 
+                                                        iint, getwidth(layerdata(igashell))) 
 
-                assemble!(assembler, celldofs[active_dofs], ike, ife)
+                assemble!(assembler, top_dofs, ke_top, fe_top)
+                assemble!(assembler, bot_dofs, ke_bot, fe_bot)
+                
             elseif assemtype == IGASHELL_FSTAR
                 @timeit "integrate_cohesive_fstar" integrate_cohesive_fstar!(
                                                             cv_cohesive_top, cv_cohesive_bot,
@@ -483,7 +500,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
             end
         end
     end 
-
 end
 
 function assemble_massmatrix!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, system_arrays::SystemArrays) where {dim_p,dim_s,T}
@@ -667,75 +683,68 @@ end
 end
 
 function integrate_cohesive_forcevector_and_stiffnessmatrix!(
-    cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
-    material::Five.AbstractMaterial, ξ::T,
+    cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot::IGAShellValues{dim_s,dim_p,T},
+    material::Five.AbstractMaterial, 
     materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
-    new_materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
-    ke::AbstractMatrix, 
-    fe::AbstractVector, 
-    ue::AbstractVector,
-    Δue::AbstractVector,
+    ke_top::AbstractMatrix, ke_bot::AbstractMatrix,
+    fe_top::AbstractVector, fe_bot::AbstractVector,
+    ue_top::AbstractVector, ue_bot::AbstractVector,
     Δt::T,
-    iint::Int, ninterfaces::Int,
-    active_dofs::AbstractVector{Int}, width::T,
+    iint::Int, active_basefunks::Vector{Int}, width::T,
     ) where {dim_s,dim_p,T}
-    
-    ndofs = length(active_dofs)
 
+    n_active_basefunction = length(active_basefunks)
+
+    ndofs_layer = getnbasefunctions_per_layer(cv_top)
     A = 0.0
-    qp_offset = (iint-1)*getnquadpoints_inplane(cv_top)
-    for qp in (1:getnquadpoints_inplane(cv_top)) .+ qp_offset
+
+    for qp in 1:getnquadpoints_inplane(cv_top)
         
         #Rotation matrix
-        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs)
+        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue_top, ue_bot)
         dΓ *= width
         A += dΓ
         
-        u₊ = zero(Vec{dim_s,T}); u₋ = zero(Vec{dim_s,T}) 
-        #Δu₊ = zero(Vec{dim_s,T}); Δu₋ = zero(Vec{dim_s,T}) 
-        for (i,j) in enumerate(active_dofs)
-            u₊ += cv_top.N[j,qp] * ue[i]
-            u₋ += cv_bot.N[j,qp] * ue[i]
-
-           # Δu₊ += cv_top.U[j,qp] * Δue[i]
-            #Δu₋ += cv_bot.U[j,qp] * Δue[i]
-        end
-
-        #ΔJ = Δu₊ - Δu₋
+        u₊ = function_value(cv_top, qp, ue_top); 
+        u₋ = function_value(cv_bot, qp, ue_bot);
         J = u₊ - u₋
         Ĵ = R'⋅J
         
+        
         #constitutive_driver
-        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, new_materialstate[qp-qp_offset])
-        new_materialstate[qp-qp_offset] = new_matstate
+        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, materialstate[qp])
+        materialstate[qp] = new_matstate
 
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
 
-        #Add viscocity term
-        #K = 1.0 #initial_stiffness(material)
-        #σᵛ = ξ *K .* ΔJ/Δt
-        #∂σᵛ∂J = ξ * K/Δt * one(SymmetricTensor{2,dim_s,T})
+        #top part
+        for i in 1:n_active_basefunction
+            Ni = cv_top.inplane_values_nurbs.N[active_basefunks[i],qp]
+            for d in 1:dim
+                #Bottom surface
+                fe[i*dim - (dim-d)]       += -t[d] * Ni
+                #Top surface
+                fe[i*dim - (dim-d) + dim] += +t[d+1] * Ni
+            end
 
-        #∂t∂J += ∂σᵛ∂J
-        #t += σᵛ
+            for j in 1:n_active_basefunction
+                Nj = cv_top.inplane_values_nurbs.N[active_basefunks[j],qp]
 
-        #if iszero(t̂)
-        #    continue
-        #end
-
-        for i in 1:ndofs
-            δui = basis_value(cv_top, qp, active_dofs[i]) - basis_value(cv_bot, qp, active_dofs[i])
-
-            fe[i] += (t ⋅ δui) * dΓ
-            for j in 1:ndofs#length(active_dofs)
-                δuj = basis_value(cv_top, qp, active_dofs[j]) - basis_value(cv_bot, qp, active_dofs[j])
-
-                ke[i,j] += δui⋅∂t∂J⋅δuj * dΓ
+                for d1 in 1:dim
+                    for d2 in 1:dim
+                        ii = i*dim - (dim-d)
+                        jj = j*dim - (dim-d)
+                        ke[ii, jj]             +=  -Nj * ∂t∂J[d1,d2] * -Ni
+                        ke[ii + dim, jj]       +=  -Nj * ∂t∂J[d1,d2] * +Ni
+                        ke[ii, jj + dim]       +=  +Nj * ∂t∂J[d1,d2] * -Ni
+                        ke[ii + dim, jj + dim] +=  +Nj * ∂t∂J[d1,d2] * +Ni
+                    end
+                end
             end
         end
     end
-    #println("")
+
     return A
 end
 
@@ -820,6 +829,7 @@ function integrate_dissipation!(
     ndofs = length(active_dofs)
 
     A = 0.0
+    
     qp_offset = (iint-1)*getnquadpoints_inplane(cv_top)
     for qp in (1:getnquadpoints_inplane(cv_top)) .+ qp_offset
         
@@ -854,15 +864,15 @@ end
 function _cohesvive_rotation_matrix!(cv_top::IGAShellValues{dim_s,dim_p,T}, 
                                      cv_bot::IGAShellValues{dim_s,dim_p,T}, 
                                      qp::Int,
-                                     ue::AbstractVector{T},
-                                     active_dofs::AbstractVector{Int}) where {dim_p,dim_s,T}
+                                     ue_top::AbstractVector{T}, ue_bot::AbstractVector{T}) where {dim_p,dim_s,T}
 
 
     g₊ = zeros(Vec{dim_s,T},dim_p)
     g₋ = zeros(Vec{dim_s,T},dim_p)
+    
     for d in 1:dim_p
-        g₊[d] = cv_top.G[qp][d] + function_parent_derivative(cv_top, qp, ue, d, active_dofs)
-        g₋[d] = cv_bot.G[qp][d] + function_parent_derivative(cv_bot, qp, ue, d, active_dofs)
+        g₊[d] = cv_top.G[qp][d] + function_parent_derivative(cv_top, qp, ue_top, d)
+        g₋[d] = cv_bot.G[qp][d] + function_parent_derivative(cv_bot, qp, ue_bot, d)
     end
     
     local _R, detJ
@@ -915,9 +925,10 @@ function _cohesvive_rotation_matrix!(cv_top::IGAShellValues{dim_s,dim_p,T},
     end
     
     R = Tensor{2,dim_s,T,dim_s^2}(_R)
-    #@assert( det(R)≈1.0 )
 
-    dV = detJ * cv_top.qr.weights[qp]
+    @assert( det(R)≈1.0 )
+
+    dV = detJ * get_qp_weight(cv_top, qp)
     
     return R, dV
 end

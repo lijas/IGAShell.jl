@@ -31,6 +31,14 @@ struct CachedOOPBasisValues{dim_p,T,M}
     active_layer_dofs_lumped::Vector{Vector{Int}}
     active_layer_dofs_layered::Vector{Vector{Int}}
     active_layer_dofs_discont::Vector{Vector{Int}}
+
+    active_interface_dofs_lumped::Vector{Vector{Int}}
+    active_interface_dofs_layered::Vector{Vector{Int}}
+    active_interface_dofs_discont::Vector{Vector{Int}}
+
+    active_local_interface_dofs_lumped::Vector{Vector{Int}}
+    active_local_interface_dofs_layered::Vector{Vector{Int}}
+    active_local_interface_dofs_discont::Vector{Vector{Int}}
 end
 
 function CachedOOPBasisValues(qr_cell_oop::LayerQuadratureRule{1,T}, 
@@ -86,11 +94,17 @@ function CachedOOPBasisValues(qr_cell_oop::LayerQuadratureRule{1,T},
     active_dofs_layered = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, [LAYERED for _ in 1:nbasefunctions_inplane])
     active_dofs_discont = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, [FULLY_DISCONTINIUOS for _ in 1:nbasefunctions_inplane])
 
+    active_interface_dofs_lumped, local_interface_dofs_lumped = generate_active_layer_dofs(ninterfaces, ooplane_order, dim_s, [LUMPED for _ in 1:nbasefunctions_inplane])
+    active_interface_dofs_layered, local_interface_dofs_lumped = generate_active_layer_dofs(ninterfaces, ooplane_order, dim_s, [LAYERED for _ in 1:nbasefunctions_inplane])
+    active_interface_dofs_discont, local_interface_dofs_lumped = generate_active_layer_dofs(ninterfaces, ooplane_order, dim_s, [FULLY_DISCONTINIUOS for _ in 1:nbasefunctions_inplane])
+
     return CachedOOPBasisValues{dim_p,T,M}(a,b,c,d1,d2,
                                      e,f,g,h1,h2,
                                      k,l,m,n1,n2, 
                                      basis_values_sideface, basis_values_vertex,
-                                     active_dofs_lumped, active_dofs_layered, active_dofs_discont)
+                                     active_dofs_lumped, active_dofs_layered, active_dofs_discont,
+                                     active_interface_dofs_lumped, active_interface_dofs_layered, active_interface_dofs_discont,
+                                     local_interface_dofs_lumped, local_interface_dofs_lumped, local_interface_dofs_lumped)
 end
 
 struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
@@ -235,8 +249,8 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     cell_values_sr = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr, mid_ip, ip_lumped )
 
     #
-    cell_values_cohesive_top = IGAShellValues(data.thickness, iqr_cohesive, oqr_cohesive[2], mid_ip, ip_lumped)
     cell_values_cohesive_bot = IGAShellValues(data.thickness, iqr_cohesive, oqr_cohesive[1], mid_ip, ip_lumped)
+    cell_values_cohesive_top = IGAShellValues(data.thickness, iqr_cohesive, oqr_cohesive[2], mid_ip, ip_lumped)
 
     M = Tensors.n_components(Tensors.get_base(eltype(cache.basis_values_sideface[1].d²Ndξ²)))
 

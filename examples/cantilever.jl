@@ -42,9 +42,9 @@ function build_cantilever_beam_example()
     )
 
     interfacematerial = MatCZBilinear(
-        K    = 1.0e5,
+        K    = 10.0e6,
         Gᴵ   = (0.5, 0.5, 0.5),
-        τᴹᵃˣ = (50.0, 50.0, 50.0),
+        τᴹᵃˣ = 1000 .* (50.0, 50.0, 50.0),
         η    = 1.6
     )
 
@@ -60,7 +60,7 @@ function build_cantilever_beam_example()
     data.grid = IgAShell.IGA.convert_to_grid_representation(nurbsmesh)
 
     #
-    cellstates = [IgAShell.LAYERED for i in 1:prod(nels)]
+    cellstates = [IgAShell.FULLY_DISCONTINIUOS for i in 1:prod(nels)]
     interface_damage = zeros(T, nlayers-1, getncells(data.grid))
     
     #Sets
@@ -162,7 +162,9 @@ function build_cantilever_beam_example()
     solver = NewtonSolver(
         Δt0 = 1.0, 
         Δt_max = 1.0, 
-        tol=1e-8)
+        tol=1e-3,
+        maxitr_first_step = 60,
+    )
 
     return solver, state, globaldata
 end

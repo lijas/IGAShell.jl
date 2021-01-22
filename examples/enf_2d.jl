@@ -124,7 +124,7 @@ midvertex = collect(getvertexset(data.grid, "mid"))[1]
 edgeset = VertexInterfaceIndex([midvertex], 2)
 etf = IGAShellExternalForce(
     set = edgeset, 
-    func = (x,t) -> [0.0, -1.0/b],
+    func = (x,t) -> [0.0, t* -1.0/b],
     igashell = igashell
 )
 push!(data.external_forces, etf)
@@ -194,6 +194,12 @@ solver = LocalDissipationSolver(
     λ_min        = -100.0,
     tol          = 1e-4,
     max_residual = 1e5
+)
+
+solver = NewtonSolver(
+    Δt0 = 0.1,
+    Δt_max = 0.1,
+    maxitr_first_step = 50
 )
 
 

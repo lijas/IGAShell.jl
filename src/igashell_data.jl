@@ -143,17 +143,13 @@ function get_active_basefunctions_in_layer(ilay::Int, order::Int, state::CELLSTA
                 offset += addon
             end
         end
-        (1:order+1) .+ offset
+        return (1:order+1) .+ offset
     end
 end
 
 function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CELLSTATE)
-    if state.state == _LUMPED
-        return []
-    elseif state.state == _LAYERED
-        return []
-    elseif is_fully_discontiniuos(state)
-        return int:(iint+1) .+ (order)*(iint)
+    if is_fully_discontiniuos(state)
+        return (0:1) .+ (order)*(iint)
     elseif is_discontiniuos(state)
         addon = is_strong_discontiniuos(state) ? order : 0
         offset = 0
@@ -164,7 +160,10 @@ function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CEL
                 offset += addon
             end
         end
-        (1:2) .+ offset
+        return (1:2) .+ offset
+        error("test this")
+    else
+        return []
     end
 end
 
@@ -183,6 +182,29 @@ function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, states
         dof_offset += ndofs_per_controlpoint(order, nlayers, nlayers-1, dim_s, cp_state)
     end
     return active_layer_dofs
+end
+
+function generate_active_interface_dofs(ninterfaces::Int, order::Int, dim_s::Int, states::Vector{CELLSTATE})
+    nlayers = ninterfaces+1
+
+    active_interface_dofs = [Int[] for _ in 1:ninterfaces]
+    active_inplane_basefunction = [Int[] for _ in 1:ninterfaces]
+    dof_offset = 0
+    inpf = 0
+    for cp_state in states
+        iinpf += 1
+        for iint in 1:ninterfaces
+            for ib in get_active_basefunctions_in_interface(iint, order, cp_state)
+                push!(active_inplane_basefunction[iint], iinpf)
+                for d in 1:dim_s
+                    push!(active_interface_dofs[iint], (ib-1)*dim_s + d + dof_offset)
+                end
+            end
+        end
+        
+        dof_offset += ndofs_per_controlpoint(order, nlayers, nlayers-1, dim_s, cp_state)
+    end
+    return active_inplane_basefunction, active_layer_dofs
 end
 
 function ndofs_per_controlpoint(ooplane_order, nlayers, ninterfaces, dim_s, state::CELLSTATE)
