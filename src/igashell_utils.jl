@@ -471,7 +471,7 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
     alldofs = Int[]
     maxu = 0.0
     for faceidx in faceset
-        
+        @show faceidx
         cellid = faceidx[1]
         local_cellid = findfirst((i)->i==cellid, igashell.cellset)
         
@@ -518,7 +518,7 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
                     #Check if it is not zero
                     if !(basis_value(cv, qp, (dof-1)*dim_s + 1)[1] ≈ 0.0)
                         for d in output.components
-                            push!(alldofs, _celldofs[(dof-1)*dim_s + d])
+                            push!(alldofs, layerdofs[(dof-1)*dim_s + d])
                         end
                     end
                 end

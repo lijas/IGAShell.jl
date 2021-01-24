@@ -28,7 +28,7 @@ interfacematerial = MatCZBilinear(
     K    = 1.0e5,
     Gᴵ   = (0.5, 0.5, 0.5),
     τᴹᵃˣ = (50.0, 50.0, 50.0),
-    η    = 1.6
+    η    = 1.0
 ) 
 
 material(_α) = 
@@ -39,7 +39,7 @@ MatTransvLinearElastic(
     G_12 = 8.0e3, 
     α = _α
 ) 
-layermats = [Material2D(material(α), Five.PLANE_STRESS) for α in angles]
+layermats = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles]
 
 #
 nurbsmesh = IgAShell.IGA.generate_nurbsmesh((NELX, ), (ORDERS[1], ), (L, ), sdim=DIM) 
@@ -92,7 +92,7 @@ push!(data.parts, igashell)
 
 #
 data.output[] = Output(
-    interval = 5.0,
+    interval = 0.0,
     runname = "enf_2d",
     savepath = "./"
 )
@@ -124,7 +124,7 @@ midvertex = collect(getvertexset(data.grid, "mid"))[1]
 edgeset = VertexInterfaceIndex([midvertex], 2)
 etf = IGAShellExternalForce(
     set = edgeset, 
-    func = (x,t) -> [0.0, t* -1.0/b],
+    func = (x,t) -> [0.0, -1.0/b],
     igashell = igashell
 )
 push!(data.external_forces, etf)
@@ -190,17 +190,17 @@ solver = LocalDissipationSolver(
     optitr       = 8,
     maxitr       = 50,
     maxsteps     = 200,
-    λ_max        = 400.0,
+    λ_max        = 400.0*2,
     λ_min        = -100.0,
     tol          = 1e-4,
     max_residual = 1e5
 )
 
-solver = NewtonSolver(
+#=solver = NewtonSolver(
     Δt0 = 0.1,
     Δt_max = 0.1,
     maxitr_first_step = 50
-)
+)=#
 
 
 output = solvethis(solver, state, globaldata)
@@ -209,4 +209,17 @@ d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(
 f = [output.outputdata["reactionforce"].data[i].forces for i in 1:length(output.outputdata["reactionforce"].data)]
 
 
+fig = plot(reuse=false)
+E₁₁ = 126.0e3
+
+Gc = 0.5; 
+I = 1/12 * b * (h/2)^3; 
+
+uz1(F) = F*(L^3 + 12a0^3)/(384*E₁₁ * I)
+uz2(F) = F*(L^3)/(384*E₁₁ * I) + 16 ./F.^2 * sqrt(E₁₁*I) * (b*Gc/3)^(3/2)
+plot!(fig, abs.(d), abs.(f), label="adaptiv")
+plot!(fig, uz1(0.0:0.1:450), 0.0:0.1:450, linestyle = :dashed, c="black")
+plot!(fig, uz2(450:-0.1:250.0), 450:-0.1:250.0, linestyle = :dashed, c="black")
+plot!(fig, ylimit = [0,500], yticks = 0.0:100.0:500.0)
+display(fig)
 

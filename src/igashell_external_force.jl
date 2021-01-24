@@ -71,19 +71,18 @@ function Five.apply_external_force!(ef::IGAShellExternalForce{P}, state::StateVa
             fill!(fe, 0.0)
 
             layerdofs = celldofs[active_layerdofs[ilay]]
-
             reinit_layer!(cv, ilay)
-
+            
             @timeit "integrate" A += _compute_igashell_external_traction_force!(cv, Xᵇ, traction, faceidx, state.t, fe, getwidth(layerdata(igashell)))
             state.system_arrays.fᵉ[layerdofs] += fe
         end
     end
-
 end
 
 function _compute_igashell_external_traction_force!(fv::IGAShellValues, Xᵇ, traction::Function, faceidx, time::Float64, fe::AbstractVector, width)
 
     A = 0.0
+
     for q_point in 1:getnquadpoints_per_layer(fv)
         dΓ = getdetJdA(fv, q_point, faceidx) * width
         X = spatial_coordinate(fv, q_point, Xᵇ)

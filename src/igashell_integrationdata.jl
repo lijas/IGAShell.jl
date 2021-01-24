@@ -94,9 +94,9 @@ function CachedOOPBasisValues(qr_cell_oop::LayerQuadratureRule{1,T},
     active_dofs_layered = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, [LAYERED for _ in 1:nbasefunctions_inplane])
     active_dofs_discont = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, [FULLY_DISCONTINIUOS for _ in 1:nbasefunctions_inplane])
 
-    active_interface_dofs_lumped, local_interface_dofs_lumped = generate_active_layer_dofs(ninterfaces, ooplane_order, dim_s, [LUMPED for _ in 1:nbasefunctions_inplane])
-    active_interface_dofs_layered, local_interface_dofs_lumped = generate_active_layer_dofs(ninterfaces, ooplane_order, dim_s, [LAYERED for _ in 1:nbasefunctions_inplane])
-    active_interface_dofs_discont, local_interface_dofs_lumped = generate_active_layer_dofs(ninterfaces, ooplane_order, dim_s, [FULLY_DISCONTINIUOS for _ in 1:nbasefunctions_inplane])
+    active_interface_dofs_lumped, local_interface_dofs_lumped = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, [LUMPED for _ in 1:nbasefunctions_inplane])
+    active_interface_dofs_layered, local_interface_dofs_layered = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, [LAYERED for _ in 1:nbasefunctions_inplane])
+    active_interface_dofs_discont, local_interface_dofs_discont = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, [FULLY_DISCONTINIUOS for _ in 1:nbasefunctions_inplane])
 
     return CachedOOPBasisValues{dim_p,T,M}(a,b,c,d1,d2,
                                      e,f,g,h1,h2,
@@ -104,7 +104,7 @@ function CachedOOPBasisValues(qr_cell_oop::LayerQuadratureRule{1,T},
                                      basis_values_sideface, basis_values_vertex,
                                      active_dofs_lumped, active_dofs_layered, active_dofs_discont,
                                      active_interface_dofs_lumped, active_interface_dofs_layered, active_interface_dofs_discont,
-                                     local_interface_dofs_lumped, local_interface_dofs_lumped, local_interface_dofs_lumped)
+                                     local_interface_dofs_lumped, local_interface_dofs_layered, local_interface_dofs_discont)
 end
 
 struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}

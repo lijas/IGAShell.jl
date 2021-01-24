@@ -149,7 +149,7 @@ end
 
 function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CELLSTATE)
     if is_fully_discontiniuos(state)
-        return (0:1) .+ (order)*(iint)
+        return (0:1) .+ (order+1)*(iint)
     elseif is_discontiniuos(state)
         addon = is_strong_discontiniuos(state) ? order : 0
         offset = 0
@@ -190,21 +190,23 @@ function generate_active_interface_dofs(ninterfaces::Int, order::Int, dim_s::Int
     active_interface_dofs = [Int[] for _ in 1:ninterfaces]
     active_inplane_basefunction = [Int[] for _ in 1:ninterfaces]
     dof_offset = 0
-    inpf = 0
+    iinpf = 0
     for cp_state in states
         iinpf += 1
         for iint in 1:ninterfaces
-            for ib in get_active_basefunctions_in_interface(iint, order, cp_state)
+            if is_interface_active(cp_state, iint)
                 push!(active_inplane_basefunction[iint], iinpf)
-                for d in 1:dim_s
-                    push!(active_interface_dofs[iint], (ib-1)*dim_s + d + dof_offset)
+                for ib in get_active_basefunctions_in_interface(iint, order, cp_state)
+                    for d in 1:dim_s
+                        push!(active_interface_dofs[iint], (ib-1)*dim_s + d + dof_offset)
+                    end
                 end
             end
         end
         
         dof_offset += ndofs_per_controlpoint(order, nlayers, nlayers-1, dim_s, cp_state)
     end
-    return active_inplane_basefunction, active_layer_dofs
+    return active_interface_dofs, active_inplane_basefunction
 end
 
 function ndofs_per_controlpoint(ooplane_order, nlayers, ninterfaces, dim_s, state::CELLSTATE)

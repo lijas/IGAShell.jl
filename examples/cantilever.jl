@@ -60,7 +60,7 @@ function build_cantilever_beam_example()
     data.grid = IgAShell.IGA.convert_to_grid_representation(nurbsmesh)
 
     #
-    cellstates = [IgAShell.FULLY_DISCONTINIUOS for i in 1:prod(nels)]
+    cellstates = [IgAShell.LAYERED for i in 1:prod(nels)]
     interface_damage = zeros(T, nlayers-1, getncells(data.grid))
     
     #Sets
