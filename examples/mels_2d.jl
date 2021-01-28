@@ -45,7 +45,7 @@ MatTransvLinearElastic(
     G_23 = 4.55e3,
     α = _α
 ) 
-layermats = [Material2D(material(α), Five.PLANE_STRESS) for α in angles]
+layermats = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles]
 
 #
 nurbsmesh = IgAShell.IGA.generate_nurbsmesh((NELX, ), (ORDERS[1], ), (L, ), sdim=DIM) 
@@ -70,6 +70,7 @@ addvertexset!(data.grid, "zfixed", (x)-> x[1] ≈ 9.5)
 cellstates = [IgAShell.LAYERED for i in 1:NELX]
 cellstates[precracked_u] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
 cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACES((1,3))
+cellstates = [IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACES((1,3)) for i in 1:NELX]
 
 interface_damage = zeros(ninterfaces, NELX)
 interface_damage[1, precracked_l] .= 1.0
@@ -89,7 +90,7 @@ IgAShell.IGAShellData(;
     initial_interface_damages = interface_damage,
     nqp_inplane_order         = 3,
     nqp_ooplane_per_layer     = 2,
-    adaptable                 = true,
+    adaptable                 = false,
     small_deformations_theory = false,
     LIMIT_UPGRADE_INTERFACE   = 0.03,
     nqp_interface_order       = 4
@@ -175,7 +176,7 @@ solver = LocalDissipationSolver(
     ΔL_max       = 5.0,
     sw2d         = 1.0,
     sw2i         = 1e-7,
-    optitr       = 5,
+    optitr       = 8,
     maxitr       = 50,
     maxsteps     = 1000,
     λ_max        = 700.0,

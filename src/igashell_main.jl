@@ -48,7 +48,7 @@ layer_thickness(igashell::IGAShell{dim_p,dim_s}, ilay::Int) where {dim_p,dim_s} 
 
 interface_material(igashell::IGAShell) = igashell.layerdata.interface_material
 
-ndofs_per_controlpoint(igashell::IGAShell{dim_p,dim_s}, state::CELLSTATE) where {dim_p,dim_s} = ndofs_per_controlpoint(ooplane_order(igashell), 
+ndofs_per_controlpoint(igashell::IGAShell{dim_p,dim_s}, state::CPSTATE) where {dim_p,dim_s} = ndofs_per_controlpoint(ooplane_order(igashell), 
                                                                                                     nlayers(igashell),
                                                                                                     ninterfaces(igashell),
                                                                                                     dim_s,
@@ -56,12 +56,14 @@ ndofs_per_controlpoint(igashell::IGAShell{dim_p,dim_s}, state::CELLSTATE) where 
 
 is_adaptive(igashell::IGAShell) = igashell.layerdata.adaptable
 
+getcellstate(igashell::IGAShell, i::Int) = igashell.adaptivity.cellstates[i]
+
 JuAFEM.nnodes_per_cell(igashell::IGAShell{dim_p}, cellid::Int=1) where dim_p = prod(igashell.layerdata.orders[1:dim_p].+1)::Int#getnbasefunctions(igashell.cv_inplane) ÷ dim_p
 JuAFEM.getdim(igashell::IGAShell{dim_p,dim_s}) where {dim_p,dim_s} = dim_s
 JuAFEM.getncells(igashell::IGAShell) = length(igashell.cellset)
 JuAFEM.getnnodes(igashell::IGAShell) = maximum(igashell.cell_connectivity)
 
-Five.get_fields(igashell::IGAShell) = [Field(:u, getmidsurface_ip(layerdata(igashell)), ndofs_per_controlpoint(igashell, LUMPED))]
+Five.get_fields(igashell::IGAShell) = [Field(:u, getmidsurface_ip(layerdata(igashell)), ndofs_per_controlpoint(igashell, LUMPED_CPSTATE))]
 
 Five.get_cellset(igashell::IGAShell) = igashell.cellset
 
@@ -141,10 +143,8 @@ function Five.construct_partstates(igashell::IGAShell)
     return states
 end
 
-function build_cellvalue!(igashell, cellid::Int)
+function build_cellvalue!(igashell, cellstate::CELLSTATE)
 
-    cellstate = getcellstate(igashell.adaptivity, cellid)
-    
     local cv
     if is_lumped(cellstate)
         intdata(igashell).active_layer_dofs .= intdata(igashell).cache_values.active_layer_dofs_lumped
@@ -157,7 +157,7 @@ function build_cellvalue!(igashell, cellid::Int)
         cv =  intdata(igashell).cell_values_discont
     elseif is_discontiniuos(cellstate) || is_mixed(cellstate)
         cv = intdata(igashell).cell_values_mixed
-        oop_values = _build_oop_basisvalue!(igashell, cellid)
+        oop_values = _build_oop_basisvalue!(igashell, cellstate)
         set_oop_basefunctions!(cv, oop_values)
     else
         error("wrong cellstate")
@@ -169,8 +169,9 @@ end
 function build_cohesive_cellvalue!(igashell, cellid::Int)
     cv_top = intdata(igashell).cell_values_cohesive_top
     cv_bot = intdata(igashell).cell_values_cohesive_bot
+    cellstate = getcellstate(igashell, cellid)
 
-    oop_cohesive_top_values, oop_cohesive_bot_values = _build_oop_cohesive_basisvalue!(igashell, cellid)
+    oop_cohesive_top_values, oop_cohesive_bot_values = _build_oop_cohesive_basisvalue!(igashell, cellstate)
 
     set_oop_basefunctions!(cv_top, oop_cohesive_top_values)
     set_oop_basefunctions!(cv_bot, oop_cohesive_bot_values)
@@ -180,9 +181,10 @@ end
 
 function build_facevalue!(igashell, faceidx::FaceIndex)
     cellid,faceid = faceidx
-
+    cellstate = getcellstate(igashell, cellid)
+    
     cv = intdata(igashell).cell_values_face
-    oop_values = _build_oop_basisvalue!(igashell, cellid, faceid)
+    oop_values = _build_oop_basisvalue!(igashell, cellstate, faceid)
  
     set_quadraturerule!(cv, get_face_qr(intdata(igashell), faceid))
     set_oop_basefunctions!(cv, oop_values)
@@ -192,12 +194,13 @@ end
 
 function build_facevalue!(igashell::IGAShell{1,2}, edgeidx::VertexIndex)
     cellid, vertexid = edgeidx
-    
+    cellstate = getcellstate(igashell, cellid)
+
     vertexid = vertex_converter(igashell, vertexid)
 
     cv = intdata(igashell).cell_values_side
     
-    oop_values = _build_oop_basisvalue!(igashell, cellid)
+    oop_values = _build_oop_basisvalue!(igashell, cellstate)
     basisvalues_inplane = cached_side_basisvalues(intdata(igashell), vertexid)
 
     set_inp_basefunctions!(cv, basisvalues_inplane)
@@ -208,10 +211,11 @@ end
 
 function build_facevalue!(igashell, edgeidx::EdgeIndex)
     cellid, edgeid = edgeidx
-    
+    cellstate = getcellstate(igashell, cellid)
+
     cv = intdata(igashell).cell_values_side
     
-    oop_values = _build_oop_basisvalue!(igashell, cellid)
+    oop_values = _build_oop_basisvalue!(igashell, cellstate)
     basisvalues_inplane = cached_side_basisvalues(intdata(igashell), edgeid)
 
     set_inp_basefunctions!(cv, basisvalues_inplane)
@@ -222,10 +226,11 @@ end
 
 function build_facevalue!(igashell, edgeidx::EdgeInterfaceIndex)
     cellid, edgeid, face = edgeidx
-   
+    cellstate = getcellstate(igashell, cellid)
+
     cv = intdata(igashell).cell_values_interface
     
-    oop_values = _build_oop_basisvalue!(igashell, cellid, face)
+    oop_values = _build_oop_basisvalue!(igashell, cellstate, face)
     basisvalues_inplane = cached_side_basisvalues(intdata(igashell), edgeid)
     
     set_quadraturerule!(cv, get_face_qr(intdata(igashell), face))
@@ -237,12 +242,13 @@ end
 
 function build_facevalue!(igashell, vertex::VertexInterfaceIndex)
     cellid, vertexid, face = vertex
+    cellstate = getcellstate(igashell, cellid)
     
     vertexid = vertex_converter(igashell, vertexid)
 
     cv = intdata(igashell).cell_values_vertices
     
-    oop_values = _build_oop_basisvalue!(igashell, cellid, face)
+    oop_values = _build_oop_basisvalue!(igashell, cellstate, face)
     basisvalues_inplane = cached_vertex_basisvalues(intdata(igashell), vertexid)
     
     set_quadraturerule!(cv, get_face_qr(intdata(igashell), face))
@@ -252,11 +258,8 @@ function build_facevalue!(igashell, vertex::VertexInterfaceIndex)
     return cv
 end 
 
-function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, face::Int=-1) where {dim_p,dim_s,T}
+function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellstate::CELLSTATE, face::Int=-1) where {dim_p,dim_s,T}
 
-    nnodes_per_cell = JuAFEM.nnodes_per_cell(igashell, cellid)
-    cellnodes = zeros(Int, nnodes_per_cell)
-    cellconectivity = cellconectivity!(cellnodes, igashell, cellid)
     order = ooplane_order(layerdata(igashell))
 
     oop_values = BasisValues{1,T,1}[]
@@ -266,9 +269,9 @@ function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, 
     active_layer_dofs = intdata(igashell).active_layer_dofs
 
     dof_offset = 0
-    for (i, nodeid) in enumerate(cellconectivity)
-        cp_state = get_controlpoint_state(adapdata(igashell), nodeid)
-        
+    for i in 1:JuAFEM.nnodes_per_cell(igashell)
+        cp_state = get_cpstate(cellstate, i)
+
         #integration points in cell
         local cv_oop
         if face == -1
@@ -293,11 +296,9 @@ function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, 
     return oop_values
 end
 
-function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int) where {dim_p,dim_s,T}
+function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellstate::CELLSTATE) where {dim_p,dim_s,T}
     
     #Get cellconectivity
-    cellnodes = zeros(Int, JuAFEM.nnodes_per_cell(igashell, cellid))
-    cellconectivity = cellconectivity!(cellnodes, igashell, cellid)
     r = ooplane_order(layerdata(igashell))
 
     top_active_dofs = [Int[] for _ in 1:ninterfaces(igashell)]
@@ -321,8 +322,8 @@ function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cell
     oop_cohesive_top_values = BasisValues{1,T,1}[]
     oop_cohesive_bot_values = BasisValues{1,T,1}[]
 
-    for (i, nodeid) in enumerate(cellconectivity)
-        cp_state = get_controlpoint_state(adapdata(igashell), nodeid)
+    for i = 1:JuAFEM.nnodes_per_cell(igashell)
+        cp_state = get_cpstate(cellstate, i)
         
         cached_bottom_values, cached_top_values = cached_cohesive_basisvalues(intdata(igashell), cp_state)
         
@@ -331,7 +332,7 @@ function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cell
 
         #active_interface_dofs!(local_interface_dofs, global_interface_dofs, cp_state, r, dim_s, dof_offset)
         if ninterfaces(igashell) > 0
-            if is_discontiniuos(cp_state)
+            if has_discontinuity(cellstate)
                 current_dof += r*dim_s
                 for iint in 1:ninterfaces(igashell)
                     if is_interface_active(cp_state, iint)
@@ -450,7 +451,8 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
 
     V = 0
     @timeit "Shell loop" for (ic, cellid) in enumerate(igashell.cellset)
-        cv = build_cellvalue!(igashell, ic)
+        cellstate = getcellstate(adapdata(igashell), ic)
+        cv = build_cellvalue!(igashell, cellstate)
         
         Ce = get_extraction_operator(intdata(igashell), ic)
         IGA.set_bezier_operator!(cv, Ce)
@@ -514,7 +516,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
 
         cellstate = getcellstate(adapdata(igashell), ic)
 
-        if !is_discontiniuos(cellstate) && !is_mixed(cellstate)
+        if is_lumped(cellstate) || is_layered(cellstate)
             continue
         end
         
@@ -639,7 +641,7 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         
         cellstate = getcellstate(adapdata(igashell), ic)
 
-        if is_discontiniuos(cellstate)
+        if has_discontinuity(cellstate)
             continue
         end
 

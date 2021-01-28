@@ -26,8 +26,8 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
             
             # Loop through all nodes for this cell and set the state 
             # of the node to the state of the cell, if it is an "upgrade"
-            for nodeid in igashell.cell_connectivity[:, ic] 
-                node_states[nodeid] = combine_states(node_states[nodeid], upgrade_to, ninterfaces(igashell))
+            for (i, nodeid) in enumerate(igashell.cell_connectivity[:, ic])
+                node_states[nodeid] = combine_states(node_states[nodeid], upgrade_to.cp_states[i], ninterfaces(igashell))
             end
         end
     end
@@ -42,8 +42,8 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
         Δue = state.Δd[_celldofs]
         
         cellnodes = igashell.cell_connectivity[:, ic]
-        new_cellnode_states = @view node_states[cellnodes]
-        current_cellnode_states = get_controlpoint_state(adapdata(igashell), cellnodes) 
+        new_cellnode_states = node_states[cellnodes]
+        current_cellnode_states = igashell.adapdata.control_point_states[cellnodes]
 
         # Check if any of the nodes in the cell has been upgraded this timestep
         # If not, no upgraded is needed.
@@ -56,14 +56,14 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
 
         # Check if the element is mixed.
         if all(new_cellnode_states[1] .== new_cellnode_states)
-            setcellstate!(adapdata(igashell), cellid, new_cellnode_states[1])
+            setcellstate!(adapdata(igashell), cellid, CELLSTATE(new_cellnode_states[1].state, new_cellnode_states))
         else
             #Get integer represenation of active interfaces
-            _state = combine_states(new_cellnode_states, ninterfaces(igashell))
-            setcellstate!(adapdata(igashell), cellid, CELLSTATE(_MIXED, _state.state2))
+            setcellstate!(adapdata(igashell), cellid, CELLSTATE(_MIXED, new_cellnode_states))
         end
 
     end
+
     adapdata(igashell).control_point_states .= node_states
 
     return instructions
@@ -156,13 +156,11 @@ function stress_interface_index(qplayerid::Int, nqpinplane::Int, dim_p::Int)
     return idx
 end
 
-function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, current_cellnode_state::AbstractVector{CELLSTATE}, cellnode_states::AbstractVector{CELLSTATE}, 
-                                      ue::Vector{T}, Δue::Vector{T}) where {dim_p,dim_s,T}
+function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, current_cellnode_state::AbstractVector{CPSTATE}, cellnode_states::AbstractVector{CPSTATE}, ue::Vector{T}, Δue::Vector{T}) where {dim_p,dim_s,T}
 
     local_dof_idxs = Int[]
     current_fielddims = Int[]
     update_fielddims = Int[]
-    cp_states = CELLSTATE[]
     extended_ue = Vector{Float64}[]
     extended_Δue = Vector{Float64}[]
     nodeids = Int[]
@@ -178,7 +176,7 @@ function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid
         current_fielddim = ndofs_per_controlpoint(igashell, cp_state)
 
         # Check if the controlpoint is being "upgraded"
-        if cellnode_states[i] == cp_state || cellnode_states[i] < cp_state  
+        if cellnode_states[i] == cp_state || cellnode_states[i].state < cp_state.state
             local_dof_idx += current_fielddim
             continue
         end
@@ -200,7 +198,6 @@ function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid
         push!(local_dof_idxs, local_dof_idx)
         push!(current_fielddims, current_fielddim)
         push!(update_fielddims, update_fielddim)
-        push!(cp_states, cp_state)
         push!(extended_ue, ue_extended)
         push!(extended_Δue, Δue_extended)
         push!(nodeids, nodeid)

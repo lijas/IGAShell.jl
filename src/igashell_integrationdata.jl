@@ -78,9 +78,9 @@ function CachedOOPBasisValues(qr_cell_oop::QuadratureRule{1,RefCube,T},
     M = Tensors.n_components(Tensors.get_base(eltype(basis_values_sideface[1].d²Ndξ²)))
 
     #Active basis values
-    active_dofs_lumped = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, [LUMPED for _ in 1:nbasefunctions_inplane])
-    active_dofs_layered = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, [LAYERED for _ in 1:nbasefunctions_inplane])
-    active_dofs_discont = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, [FULLY_DISCONTINIUOS for _ in 1:nbasefunctions_inplane])
+    active_dofs_lumped  = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, LUMPED)
+    active_dofs_layered = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, LAYERED)
+    active_dofs_discont = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, FULLY_DISCONTINIUOS)
 
     return CachedOOPBasisValues{dim_p,T,M}(a,b,c,d1,d2,
                                      e,f,g,h1,h2,
@@ -127,7 +127,7 @@ struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
 end
 
 
-function cached_cell_basisvalues(intdata::IGAShellIntegrationData, i::CELLSTATE)
+function cached_cell_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE)
     is_lumped(i) && return intdata.cache_values.basis_values_lumped
     is_layered(i) && return intdata.cache_values.basis_values_layered
     is_fully_discontiniuos(i) && return intdata.cache_values.basis_values_discont
@@ -136,7 +136,7 @@ function cached_cell_basisvalues(intdata::IGAShellIntegrationData, i::CELLSTATE)
     error("wrong state")
 end
 
-function cached_cohesive_basisvalues(intdata::IGAShellIntegrationData, i::CELLSTATE)
+function cached_cohesive_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE)
     is_lumped(i) && return intdata.cache_values.basis_cohseive_lumped
     is_layered(i) && return intdata.cache_values.basis_cohesive_layered
     is_fully_discontiniuos(i) && return intdata.cache_values.basis_cohesive_discont
@@ -145,7 +145,7 @@ function cached_cohesive_basisvalues(intdata::IGAShellIntegrationData, i::CELLST
     error("wrong state")
 end
 
-function cached_face_basisvalues(intdata::IGAShellIntegrationData, i::CELLSTATE, face::Int)::BasisValues{1,Float64,1}
+function cached_face_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE, face::Int)::BasisValues{1,Float64,1}
     is_lumped(i) && return  intdata.cache_values.basis_values_lumped_face[face]
     is_layered(i) && return    intdata.cache_values.basis_values_layered_face[face]
     is_fully_discontiniuos(i) && return    intdata.cache_values.basis_values_discont_face[face]
@@ -162,20 +162,20 @@ function cached_vertex_basisvalues(intdata::IGAShellIntegrationData, vertex::Int
     return intdata.cache_values.basis_values_vertex[vertex]
 end
 
-function get_or_create_discontinious_basisvalues!(order::Int, ninterfaces::Int, cellstate::CELLSTATE, dict::Dict, qrs)
-    return get!(dict, cellstate.state2) do
-        return create_discontinious_basisvalues(order, ninterfaces, cellstate, qrs)
+function get_or_create_discontinious_basisvalues!(order::Int, ninterfaces::Int, cpstate::CPSTATE, dict::Dict, qrs)
+    return get!(dict, cpstate.config) do
+        return create_discontinious_basisvalues(order, ninterfaces, cpstate, qrs)
     end
 end
 
-function create_discontinious_basisvalues(order::Int, ninterfaces::Int, cellstate::CELLSTATE, qrs::QuadratureRule)
-    knot_discont = generate_knot_vector(cellstate, order, ninterfaces)
+function create_discontinious_basisvalues(order::Int, ninterfaces::Int, cpstate::CPSTATE, qrs::QuadratureRule)
+    knot_discont = generate_knot_vector(cpstate, order, ninterfaces)
     ip_discont = IGA.BSplineBasis(knot_discont, order)
     return BasisValues(qrs, ip_discont)
 end
 
-function create_discontinious_basisvalues(order::Int, ninterfaces::Int, cellstate::CELLSTATE, qrs::AbstractVector{<:QuadratureRule})
-    knot_discont = generate_knot_vector(cellstate, order, ninterfaces)
+function create_discontinious_basisvalues(order::Int, ninterfaces::Int, cpstate::CPSTATE, qrs::AbstractVector{<:QuadratureRule})
+    knot_discont = generate_knot_vector(cpstate, order, ninterfaces)
     ip_discont = IGA.BSplineBasis(knot_discont, order)
     return (BasisValues(qrs[1], ip_discont), BasisValues(qrs[2], ip_discont))
 end 

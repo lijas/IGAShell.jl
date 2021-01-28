@@ -6,7 +6,7 @@ Also stores the bezier-extraction operators for getting the new dofvalues of a c
 """
 struct IGAShellAdaptivity{T}
     cellstates::Vector{CELLSTATE}
-    control_point_states::Vector{CELLSTATE}
+    control_point_states::Vector{CPSTATE}
 
     lumped2layered::IGA.BezierExtractionOperator{T}
     layered2fullydiscont::IGA.BezierExtractionOperator{T}
@@ -27,11 +27,11 @@ function get_controlpoint_state(adap::IGAShellAdaptivity, cpid::Int)
 end
 
 function get_controlpoint_state(adap::IGAShellAdaptivity, cpid::Vector{Int})
-    return @view adap.control_point_states[cpid]
+    return adap.control_point_states[cpid]
 end
 
 
-function set_controlpoint_state!(adap::IGAShellAdaptivity, cpid::Int, state::CELLSTATE)
+function set_controlpoint_state!(adap::IGAShellAdaptivity, cpid::Int, state::CPSTATE)
     adap.control_point_states[cpid] = state
 end
 
@@ -68,13 +68,13 @@ function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, cell_connectivity
     # This means that some cells will be in a mixed mode... Determine those
     # Prioritize the DISCONTINIUOS before LAYERED and LUMPED, ie. if one node is both lumped 
     # and disocontinous, choose it to be dinscontionous
-    node_states = fill(LUMPED, nnodes)
+    node_states = fill(LUMPED_CPSTATE, nnodes)
 
     for cellid in 1:ncells
         cellstate = data.initial_cellstates[cellid] 
         for cellnodes in cell_connectivity[:, cellid]
             for nodeid in cellnodes
-                node_states[nodeid] = combine_states(node_states[nodeid], cellstate, ninterfaces)
+                node_states[nodeid] = combine_states(node_states[nodeid], first(cellstate.cpstates), ninterfaces)
             end
         end
     end
@@ -82,12 +82,11 @@ function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, cell_connectivity
     #Check if there is any cell that is has MIXED states controlpoints
     for cellid in 1:ncells
         nodeids = cell_connectivity[:, cellid]
-        cellnode_states = @view node_states[nodeids]
+        cellnode_states = node_states[nodeids]
 
         #if NOT all of the nodes in the cell are equal, the element is mixed
         if !all(first(cellnode_states) .== cellnode_states)
-            _state = combine_states(cellnode_states, ninterfaces)
-            data.initial_cellstates[cellid] = CELLSTATE(_MIXED, _state.state2)
+            data.initial_cellstates[cellid] = CELLSTATE(_MIXED, copy(cellnode_states))
         end
 
     end
@@ -98,7 +97,7 @@ function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, cell_connectivity
                               interface_knots, order)
 end
 
-function get_upgrade_operator(adap::IGAShellAdaptivity, from::CELLSTATE, to::CELLSTATE)
+function get_upgrade_operator(adap::IGAShellAdaptivity, from::CPSTATE, to::CPSTATE)
     ninterfaces = length(adap.interface_knots)
 
     if is_lumped(from) && is_layered(to)
@@ -113,23 +112,23 @@ function get_upgrade_operator(adap::IGAShellAdaptivity, from::CELLSTATE, to::CEL
         return _get_upgrade_operator(adap.strongdiscont2fullydiscont, adap.order, adap.interface_knots, from, to)
     elseif (is_layered(from) || is_lumped(from)) && is_discontiniuos(to)
         return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
-    elseif is_discontiniuos(from) && is_discontiniuos(to)
-        return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
+    # elseif is_discontiniuos(from) && is_discontiniuos(to)
+        # return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
     else
         error("Wrong upgrade, $from -> $to")
     end
 
 end
 
-function _get_upgrade_operator(dict::Dict, order::Int, interface_knots::Vector{Float64}, from::CELLSTATE, to::CELLSTATE)
+function _get_upgrade_operator(dict::Dict, order::Int, interface_knots::Vector{Float64}, from::CPSTATE, to::CPSTATE)
     @assert(is_discontiniuos(from) && is_fully_discontiniuos(to))
 
-    return get!(dict, from.state2) do
+    return get!(dict, from.config) do
         return create_upgrade_operator(order, interface_knots, from, to)
     end
 end
 
-function create_upgrade_operator(order::Int, interface_knots::Vector{Float64}, from::CELLSTATE, to::CELLSTATE)
+function create_upgrade_operator(order::Int, interface_knots::Vector{Float64}, from::CPSTATE, to::CPSTATE)
     
     ninterfaces = length(interface_knots)
     kv = generate_knot_vector(from, order, ninterfaces)

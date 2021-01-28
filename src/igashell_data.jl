@@ -10,69 +10,96 @@ const _WEAK_DISCONTINIUOS = 3
 const _STRONG_DISCONTINIUOS = 4
 const _FULLY_DISCONTINIUOS = 5
 
-struct CELLSTATE
+struct CPSTATE
     state::Int
-    state2::Int    
+    config::Int    
 
-    function CELLSTATE(state::Int, state2::Int)
-        (state == _LUMPED || state == _LAYERED) && @assert(state2==0)
-        return new(state, state2)
+    function CPSTATE(state::Int, config::Int)
+        @assert(state != _MIXED)
+        if config == 0
+            @assert(state == _LUMPED || state == _LAYERED)
+        else
+            @assert(state != _LUMPED && state != _LAYERED)
+        end 
+        return new(state, config)
     end
 
 end
 
-Base.getindex(v::Dict{Int,T}, i::CELLSTATE) where T = v[i.state2]
-Base.setindex!(v::Dict{Int,T2}, value::T2, i::CELLSTATE) where {T2} = v[i.state2] = value
+struct CELLSTATE
+    state::Int
+    cpstates::Vector{CPSTATE}
+end
+
+get_cpstate(state::CELLSTATE, i::Int) = is_mixed(state) ? state.cpstates[i] : first(state.cpstates)
+
+CELL_OR_CPSTATE = Union{CELLSTATE, CPSTATE}
+
+Base.getindex(v::Dict{Int,T}, i::CELLSTATE) where T = v[i.config]
+Base.setindex!(v::Dict{Int,T2}, value::T2, i::CELLSTATE) where {T2} = v[i.config] = value
 Broadcast.broadcastable(c::CELLSTATE) = (c,) #In order to be able to do cellstates[indeces] .= LUMPED
+Broadcast.broadcastable(c::CPSTATE) = (c,) #In order to be able to do cellstates[indeces] .= LUMPED
 
-const LUMPED = CELLSTATE(_LUMPED, 0)
-const LAYERED = CELLSTATE(_LAYERED, 0)
-const FULLY_DISCONTINIUOS = CELLSTATE(_FULLY_DISCONTINIUOS, typemax(Int))
-
-STRONG_DISCONTINIUOS(i::Int) = CELLSTATE(_STRONG_DISCONTINIUOS, i)
-WEAK_DISCONTINIUOS(i::Int) = CELLSTATE(_WEAK_DISCONTINIUOS, i)
-WEAK_DISCONTINIUOS_AT_INTERFACE(iint::Int) = CELLSTATE(_WEAK_DISCONTINIUOS, (Int(1)<<(iint-1)))
-STRONG_DISCONTINIUOS_AT_INTERFACE(iint::Int) = CELLSTATE(_STRONG_DISCONTINIUOS, (Int(1)<<(iint-1)))
+const LUMPED_CPSTATE = CPSTATE(_LUMPED, 0)
+const LUMPED              = CELLSTATE(_LUMPED,  [CPSTATE(_LUMPED, 0)])
+const LAYERED             = CELLSTATE(_LAYERED, [CPSTATE(_LAYERED, 0)])
+const FULLY_DISCONTINIUOS = CELLSTATE(_FULLY_DISCONTINIUOS, [CPSTATE(_FULLY_DISCONTINIUOS, typemax(Int))])
+STRONG_DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _STRONG_DISCONTINIUOS)
+WEAK_DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _WEAK_DISCONTINIUOS)
 
 function _DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}, _DISCONTINIUOS::Int) where {N}
     state = Int(0)
     for i in iint
         state |= (Int(1)<<(i-1))
     end
-    return CELLSTATE(_DISCONTINIUOS, state)
+    return CELLSTATE(_DISCONTINIUOS, [state])
 end
-STRONG_DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _STRONG_DISCONTINIUOS)
-WEAK_DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _WEAK_DISCONTINIUOS)
 
-
-is_fully_discontiniuos(c::CELLSTATE) = (c.state == _FULLY_DISCONTINIUOS)# && c.state2==2^ninterfaces-1)
-is_weak_discontiniuos(c::CELLSTATE) = (c.state == _WEAK_DISCONTINIUOS)
-is_strong_discontiniuos(c::CELLSTATE) = (c.state == _STRONG_DISCONTINIUOS)
-is_discontiniuos(c::CELLSTATE) = (c.state == _WEAK_DISCONTINIUOS || c.state == _STRONG_DISCONTINIUOS || c.state == _FULLY_DISCONTINIUOS)
-is_lumped(c::CELLSTATE) = (c.state == _LUMPED)
-is_layered(c::CELLSTATE) = (c.state == _LAYERED)
+is_fully_discontiniuos(c::CELL_OR_CPSTATE) = (c.state == _FULLY_DISCONTINIUOS)# && c.config==2^ninterfaces-1)
+is_weak_discontiniuos(c::CELL_OR_CPSTATE) = (c.state == _WEAK_DISCONTINIUOS)
+is_strong_discontiniuos(c::CELL_OR_CPSTATE) = (c.state == _STRONG_DISCONTINIUOS)
+is_lumped(c::CELL_OR_CPSTATE) = (c.state == _LUMPED)
+is_layered(c::CELL_OR_CPSTATE) = (c.state == _LAYERED)
 is_mixed(c::CELLSTATE) = (c.state == _MIXED)
+has_discontinuity(c::CELL_OR_CPSTATE) = is_fully_discontiniuos(c) || is_strong_discontiniuos(c) || is_weak_discontiniuos(c)
 
-Base.:(>)(a::CELLSTATE, b::CELLSTATE) = a.state > b.state 
-Base.:(<)(a::CELLSTATE, b::CELLSTATE) = a.state < b.state 
-#Base.:(>=)(a::CELLSTATE, b::CELLSTATE) = a.state >= b.state
-
-@inline function is_interface_active(state::CELLSTATE, iint::Int)
+function is_interface_active(state::CPSTATE, iint::Int)
     is_fully_discontiniuos(state) && return true
     !is_discontiniuos(state) && return false
     
-    interface_bit = ((state.state2 >> (iint-1)) & Int(1))
+    interface_bit = ((state.config >> (iint-1)) & Int(1))
     return 1 == interface_bit
 end
 
-function insert_interface(state::CELLSTATE, iint::Int, ninterfaces::Int)
+function is_interface_active(state::CELLSTATE, iint::Int)
+    is_lumped(state) && return false
+    is_layered(state) && return false
+    is_fully_discontiniuos(state) && return true
+    
+    if is_mixed(state)
+        for cpstate in state.cpstates
+            if is_interface_active(cpstate, iint)
+                return true
+            end 
+        end
+        return false
+    end
 
-    new_state2 = state.state2 | (Int(1)<<(iint-1))
+    if is_strong_discontiniuos(state) || is_weak_discontiniuos(state)
+        is_interface_active(first(state.cpstates), iint)
+    end
+
+    error("Unreachable code...")
+end
+
+function insert_interface(state::CPSTATE, iint::Int, ninterfaces::Int)
+
+    config = state.config | (Int(1)<<(iint-1))
     
     new_state = state.state
     if new_state2 >= 2^ninterfaces-1 #all layers active
         new_state = _FULLY_DISCONTINIUOS
-        new_state2 = typemax(Int)
+        config = 2^ninterfaces-1
     else
         if new_state == _LUMPED
             new_state = _WEAK_DISCONTINIUOS
@@ -81,34 +108,54 @@ function insert_interface(state::CELLSTATE, iint::Int, ninterfaces::Int)
         end
     end
 
-    return CELLSTATE(new_state, new_state2)
+    return CPSTATE(new_state, config)
 end
 
-function combine_states(a::CELLSTATE, b::CELLSTATE, ninterface::Int)
-    new_state = max(a.state, b.state)
-    new_state2 = a.state2 | b.state2
 
-    if new_state == _LUMPED
-        new_state = _WEAK_DISCONTINIUOS
-    elseif new_state == _LAYERED
-        new_state = _STRONG_DISCONTINIUOS
+function insert_interface(state::CELLSTATE, iint::Int, ninterfaces::Int)
+    new_cpstates = copy(state.cpstates)
+
+    if !is_mixed(state)
+        state.cpstates[1] = insert_interface[state.cpstates[1], iint, ninterfaces]
     end
 
-    #Check if number of active interfaces are equal to fully_discontinous state
-    new_state = (new_state2 >= 2^ninterface-1) ? _FULLY_DISCONTINIUOS : new_state
-    new_state2= (new_state2 >= 2^ninterface-1) ? typemax(Int) : new_state2
-    return CELLSTATE(new_state, new_state2)
+    new_cpstates[1] = insert_interface(new_cpstates[1], iint, ninterfaces)
+    new_state = new_cpstates[1].state
+    for i in 2:length(state.cpstates)
+
+        new_cpstates[i] = insert_interface(new_cpstates[i], iint, ninterfaces)
+
+        if new_cpstates[2].state > new_state
+            new_state = new_cpstates[2].state
+        end
+        if new_cpstates[1].state != new_cpstates[i].state
+            mixed = true
+        end
+    end
+
+    new_state = mixed==true ? _MIXED : new_state
+    return CELLSTATE(state.state, new_cpstates)
 end
 
-function combine_states(states::AbstractVector{CELLSTATE}, ninterfaces::Int)
+function combine_states(a::CPSTATE, b::CPSTATE, ninterfaces::Int)
+    new_state = max(a.state, b.state)
+    new_config = a.config | b.config
+
+    #Check if number of active interfaces are equal to fully_discontinous state
+    new_state = (new_config >= 2^ninterfaces-1) ? _FULLY_DISCONTINIUOS : new_state
+    new_config   = (new_config >= 2^ninterfaces-1) ? typemax(Int) : new_config
+    return CPSTATE(new_state, new_config)
+end
+
+#=function combine_states(states::AbstractVector{CELLSTATE}, ninterfaces::Int)
     new_cell_state = states[1]
     for iint in 2:length(states)
         new_cell_state = combine_states(new_cell_state, states[iint], ninterfaces)
     end
     return new_cell_state
-end
+end=#
 
-function generate_knot_vector(state::CELLSTATE, order::Int, ninterfaces::Int)
+function generate_knot_vector(state::CPSTATE, order::Int, ninterfaces::Int)
     if state.state == _LUMPED
         return generate_knot_vector(order, ninterfaces, fill(0, ninterfaces))
     elseif state.state == _LAYERED
@@ -124,7 +171,7 @@ function generate_knot_vector(state::CELLSTATE, order::Int, ninterfaces::Int)
     end
 end
 
-function get_active_basefunction_in_layer(ilay::Int, order::Int, state::CELLSTATE)
+function get_active_basefunction_in_layer(ilay::Int, order::Int, state::CPSTATE)
     if state.state == _LUMPED
         return 1:(order+1)
     elseif state.state == _LAYERED
@@ -145,10 +192,11 @@ function get_active_basefunction_in_layer(ilay::Int, order::Int, state::CELLSTAT
     end
 end
 
-function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, states::Vector{CELLSTATE})
+function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, nbasefunctions_inplane::Int, state::CELLSTATE)
     active_layer_dofs = [Int[] for _ in 1:nlayers]
     dof_offset = 0
-    for cp_state in states
+    for i in 1:nbasefunctions_inplane
+        cp_state = get_cpstate(state, i)
         for ilay in 1:nlayers
             for ib in get_active_basefunction_in_layer(ilay, order, cp_state)
                 for d in 1:dim_s
@@ -162,7 +210,7 @@ function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, states
     return active_layer_dofs
 end
 
-function ndofs_per_controlpoint(ooplane_order, nlayers, ninterfaces, dim_s, state::CELLSTATE)
+function ndofs_per_controlpoint(ooplane_order, nlayers, ninterfaces, dim_s, state::CPSTATE)
     if is_lumped(state)
         return (ooplane_order+1)*dim_s
     elseif is_layered(state)
