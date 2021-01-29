@@ -42,9 +42,9 @@ function initial_upgrade_of_dofhandler(dh::MixedDofHandler, igashell::IGAShell)
     for (ic, cellid) in enumerate(igashell.cellset)
 
         cellnodes = igashell.cell_connectivity[:, ic]
-        cellnode_states = @view adapdata(igashell).control_point_states[cellnodes]
+        cellnode_states = adapdata(igashell).control_point_states[cellnodes]
 
-        initial_cellnode_states = fill(LUMPED, length(cellnode_states))
+        initial_cellnode_states = fill(LUMPED_CPSTATE, length(cellnode_states))
 
         if cellnode_states != initial_cellnode_states
             ndofs = ndofs_per_cell(dh, cellid)
@@ -307,11 +307,11 @@ function generate_knot_vector(order::Int, ninterfaces::Int, nmultiplicity::Vecto
     return kv
 end
 
-function generate_nmultiplicity_vector(state::CELLSTATE, ninterfaces::Int, order::Int) 
+function generate_nmultiplicity_vector(state::CPSTATE, ninterfaces::Int, order::Int) 
     if is_weak_discontiniuos(state)
-        return digits(state.state2, base=2, pad=ninterfaces)*(order+1)
+        return digits(state.config, base=2, pad=ninterfaces)*(order+1)
     elseif is_strong_discontiniuos(state)
-        return digits(state.state2, base=2, pad=ninterfaces) .+ order
+        return digits(state.config, base=2, pad=ninterfaces) .+ order
     elseif is_fully_discontiniuos(state)
         return fill(order+1, ninterfaces)
     elseif is_lumped(state)
@@ -401,42 +401,6 @@ end
 function extrapolate(y1,y2,x1,x2,x)
     return y1 + ((x-x1)/(x2-x1))*(y2-y1)
 end#
-
-"""
-WIP, determine active dofs in each layer
-"""
-
-is_active_in_layer(ib::Int, ilay::Int, controlpoint_state::Val{LUMPED}, data::IGAShellData{dim_s,dim_p,T}) where {dim_s,dim_p,T} = true
-
-function is_active_in_layer(ib::Int, ilay::Int, ::Val{LAYERED}, data::IGAShellData{dim_s,dim_p,T}) where {dim_s,dim_p,T}
-    r = data.orders[dim_s]
-    basefuncs_in_layer = (1:r+1) .+ (ilay-1)*(r+1) #not checked
-    return ib in basefuncs_in_layer
-end
-
-function generate_active_dofs(data::IGAShellData{dim_s,dim_p,T}, controlpoint_states::Vector{CELLSTATE}) where {dim_s,dim_p,T}
-    @assert length(controlpoint_states) == nnodes_per_cell(data)
-
-    nlay = nlayers(data)
-    active_layer_dofs = [Int[] for i in 1:nlay]
-    
-    dof_counter = 0
-    for icp in 1:length(controlpoint_states) #loop over each inplane node
-        cpstate = controlpoint_states[icp]
-        for ilay in 1:nlay
-            for ib in getnbasefunctions(cpstate) #loop over each ooplane node
-                if is_active_in_layer(ib, cpstate, ilay, nlay)
-                    for d in 1:dim_s
-                        push!(active_layer_dofs[ilay], dof_counter + d)
-                    end
-                else
-                    #Could proboboly break here...
-                end
-                dof_counter += dim_s
-            end
-        end
-    end
-end
 
 
 """

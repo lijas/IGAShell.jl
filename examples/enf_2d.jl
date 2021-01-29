@@ -56,8 +56,8 @@ addcellset!(data.grid, "topcells", (x)-> true)
 partset1 = collect(1:length(data.grid.cells))
 
 #
-cellstates = [IgAShell.FULLY_DISCONTINIUOS for i in 1:NELX]
-#cellstates[precracked_cells] .= eliasfem.FULLY_DISCONTINIUOS
+cellstates = [IgAShell.LAYERED for i in 1:NELX]
+cellstates[precracked_cells] .= IgAShell.FULLY_DISCONTINIUOS
 
 interface_damage = zeros(nlayers-1, getncells(data.grid))
 interface_damage[1, precracked_cells] .= 1.0
@@ -76,7 +76,7 @@ IgAShell.IGAShellData(;
     initial_interface_damages = interface_damage,
     nqp_inplane_order         = 3,
     nqp_ooplane_per_layer     = 2,
-    adaptable                 = false,
+    adaptable                 = true,
     small_deformations_theory = false,
     LIMIT_UPGRADE_INTERFACE   = 0.01,
     nqp_interface_order       = 4
