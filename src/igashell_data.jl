@@ -231,6 +231,30 @@ function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, nbasef
     return active_layer_dofs
 end
 
+function generate_active_interface_dofs(ninterfaces::Int, order::Int, dim_s::Int, nbasefunctions_inplane::Int, state::CELLSTATE)
+    nlayers = ninterfaces+1
+
+    active_interface_dofs = [Int[] for _ in 1:ninterfaces]
+    #active_inplane_basefunction = [Int[] for _ in 1:ninterfaces]
+    dof_offset = 0
+    for iinpf in 1:nbasefunctions_inplane
+        cp_state = get_cpstate(state, i)
+        for iint in 1:ninterfaces
+            if is_interface_active(cp_state, iint)
+                #push!(active_inplane_basefunction[iint], iinpf)
+                for ib in get_active_basefunctions_in_interface(iint, order, cp_state)
+                    for d in 1:dim_s
+                        push!(active_interface_dofs[iint], (ib-1)*dim_s + d + dof_offset)
+                    end
+                end
+            end
+        end
+        
+        dof_offset += ndofs_per_controlpoint(order, nlayers, nlayers-1, dim_s, cp_state)
+    end
+    return active_interface_dofs#, active_inplane_basefunction
+end
+
 function ndofs_per_controlpoint(ooplane_order, nlayers, ninterfaces, dim_s, state::CPSTATE)
     if is_lumped(state)
         return (ooplane_order+1)*dim_s

@@ -187,14 +187,6 @@ get_inp_quadraturerule(intdata::IGAShellIntegrationData) = intdata.iqr
 get_face_qr(intdata::IGAShellIntegrationData, face::Int) = intdata.qr_faces[face]
 get_vertex_qr(intdata::IGAShellIntegrationData, vertex::Int) = intdata.qr_vertices[vertex]
 
-function get_active_interface_dofs(intdata::IGAShellIntegrationData, iint::Int)
-    return intdata.active_interface_dofs[iint]
-end
-
-function get_active_layer_dofs(intdata::IGAShellIntegrationData, iint::Int)
-    return intdata.active_layer_dofs[iint]
-end
-
 function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IGA.BezierExtractionOperator{T}}) where {dim_p,dim_s,T}
     
     order = data.orders[dim_s]
