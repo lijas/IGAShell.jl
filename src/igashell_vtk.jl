@@ -173,7 +173,7 @@ function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGA
                 continue
             end
 
-            _Coop = get_upgrade_operator(adapdata(igashell), current_state, FULLY_DISCONTINIUOS)
+            _Coop = get_upgrade_operator(adapdata(igashell), current_state, FULLY_DISCONTINIUOS_CPSTATE)
             
             _ue_bezier = IGA.compute_bezier_points(_Coop, ue[offset:offset+_ndofs-1], dim = dim_s)
 

@@ -155,7 +155,7 @@ function build_cellvalue!(igashell, cellstate::CELLSTATE)
     elseif is_fully_discontiniuos(cellstate)
         intdata(igashell).active_layer_dofs .= intdata(igashell).cache_values.active_layer_dofs_discont
         cv =  intdata(igashell).cell_values_discont
-    elseif is_discontiniuos(cellstate) || is_mixed(cellstate)
+    elseif has_discontinuity(cellstate) || is_mixed(cellstate)
         cv = intdata(igashell).cell_values_mixed
         oop_values = _build_oop_basisvalue!(igashell, cellstate)
         set_oop_basefunctions!(cv, oop_values)
@@ -283,7 +283,7 @@ function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellstate::CE
 
         # Generate list with the active dofs for each layer
         for ilay in 1:nlayers(igashell)
-            for ib in get_active_basefunction_in_layer(ilay, order, cp_state)
+            for ib in get_active_basefunctions_in_layer(ilay, order, cp_state)
                 for d in 1:dim_s
                     push!(active_layer_dofs[ilay], (ib-1)*dim_s + d + dof_offset)
                 end
@@ -538,7 +538,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         
         for iint in 1:ninterfaces(igashell)      
 
-            active_dofs = get_active_interface_dofs(intdata(igashell), iint)
+            active_dofs = 1:JuAFEM.ndofs_per_cell(dh, cellid)#get_active_interface_dofs(intdata(igashell), iint)
             
             if is_mixed(cellstate) || is_weak_discontiniuos(cellstate) || is_strong_discontiniuos(cellstate)
                 if length(active_dofs) == 0
@@ -641,7 +641,7 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         
         cellstate = getcellstate(adapdata(igashell), ic)
 
-        if has_discontinuity(cellstate)
+        if !is_lumped(cellstate)
             continue
         end
 

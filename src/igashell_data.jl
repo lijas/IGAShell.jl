@@ -41,18 +41,37 @@ Broadcast.broadcastable(c::CELLSTATE) = (c,) #In order to be able to do cellstat
 Broadcast.broadcastable(c::CPSTATE) = (c,) #In order to be able to do cellstates[indeces] .= LUMPED
 
 const LUMPED_CPSTATE = CPSTATE(_LUMPED, 0)
+const LAYERED_CPSTATE = CPSTATE(_LAYERED, 0)
+const FULLY_DISCONTINIUOS_CPSTATE = CPSTATE(_FULLY_DISCONTINIUOS, typemax(Int))
+STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE(iint::Int)  = _DISCONTINIUOS_AT_INTERFACES_CPSTATE((iint,), _STRONG_DISCONTINIUOS)
+STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE(iint::NTuple{N,Int}) where {N}  = _DISCONTINIUOS_AT_INTERFACES_CPSTATE(iint, _STRONG_DISCONTINIUOS)
+WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE(iint::Int)  = _DISCONTINIUOS_AT_INTERFACES_CPSTATE((iint,), _WEAK_DISCONTINIUOS)
+WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE(iint::NTuple{N,Int}) where {N}  = _DISCONTINIUOS_AT_INTERFACES_CPSTATE(iint, _WEAK_DISCONTINIUOS)
+
+
+function _DISCONTINIUOS_AT_INTERFACES_CPSTATE(iint::NTuple{N,Int}, _DISCONTINIUOS::Int) where {N}
+    state = Int(0)
+    for i in iint
+        state |= (Int(1)<<(i-1))
+    end
+    return CPSTATE(_DISCONTINIUOS, state)
+end
+
 const LUMPED              = CELLSTATE(_LUMPED,  [CPSTATE(_LUMPED, 0)])
 const LAYERED             = CELLSTATE(_LAYERED, [CPSTATE(_LAYERED, 0)])
 const FULLY_DISCONTINIUOS = CELLSTATE(_FULLY_DISCONTINIUOS, [CPSTATE(_FULLY_DISCONTINIUOS, typemax(Int))])
-STRONG_DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _STRONG_DISCONTINIUOS)
-WEAK_DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _WEAK_DISCONTINIUOS)
+STRONG_DISCONTINIUOS_AT_INTERFACE(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _STRONG_DISCONTINIUOS)
+STRONG_DISCONTINIUOS_AT_INTERFACE(iint::Int)  = _DISCONTINIUOS_AT_INTERFACES((iint,), _STRONG_DISCONTINIUOS)
+WEAK_DISCONTINIUOS_AT_INTERFACE(iint::NTuple{N,Int}) where {N} = _DISCONTINIUOS_AT_INTERFACES(iint, _WEAK_DISCONTINIUOS)
+WEAK_DISCONTINIUOS_AT_INTERFACE(iint::Int)  = _DISCONTINIUOS_AT_INTERFACES((iint,), _WEAK_DISCONTINIUOS)
 
 function _DISCONTINIUOS_AT_INTERFACES(iint::NTuple{N,Int}, _DISCONTINIUOS::Int) where {N}
     state = Int(0)
     for i in iint
         state |= (Int(1)<<(i-1))
     end
-    return CELLSTATE(_DISCONTINIUOS, [state])
+    cpstate = CPSTATE(_DISCONTINIUOS, state)
+    return CELLSTATE(_DISCONTINIUOS, [cpstate])
 end
 
 is_fully_discontiniuos(c::CELL_OR_CPSTATE) = (c.state == _FULLY_DISCONTINIUOS)# && c.config==2^ninterfaces-1)
@@ -65,7 +84,7 @@ has_discontinuity(c::CELL_OR_CPSTATE) = is_fully_discontiniuos(c) || is_strong_d
 
 function is_interface_active(state::CPSTATE, iint::Int)
     is_fully_discontiniuos(state) && return true
-    !is_discontiniuos(state) && return false
+    is_lumped(state) || is_layered(state) && return false
     
     interface_bit = ((state.config >> (iint-1)) & Int(1))
     return 1 == interface_bit
@@ -97,9 +116,9 @@ function insert_interface(state::CPSTATE, iint::Int, ninterfaces::Int)
     config = state.config | (Int(1)<<(iint-1))
     
     new_state = state.state
-    if new_state2 >= 2^ninterfaces-1 #all layers active
+    if config >= 2^ninterfaces-1 #all layers active
         new_state = _FULLY_DISCONTINIUOS
-        config = 2^ninterfaces-1
+        config = typemax(Int)
     else
         if new_state == _LUMPED
             new_state = _WEAK_DISCONTINIUOS
@@ -116,11 +135,13 @@ function insert_interface(state::CELLSTATE, iint::Int, ninterfaces::Int)
     new_cpstates = copy(state.cpstates)
 
     if !is_mixed(state)
-        state.cpstates[1] = insert_interface[state.cpstates[1], iint, ninterfaces]
+        new_cpstate = insert_interface(state.cpstates[1], iint, ninterfaces)
+        return CELLSTATE(new_cpstate.state, [new_cpstate])
     end
 
     new_cpstates[1] = insert_interface(new_cpstates[1], iint, ninterfaces)
     new_state = new_cpstates[1].state
+    mixed = false
     for i in 2:length(state.cpstates)
 
         new_cpstates[i] = insert_interface(new_cpstates[i], iint, ninterfaces)
@@ -134,7 +155,7 @@ function insert_interface(state::CELLSTATE, iint::Int, ninterfaces::Int)
     end
 
     new_state = mixed==true ? _MIXED : new_state
-    return CELLSTATE(state.state, new_cpstates)
+    return CELLSTATE(new_state, new_cpstates)
 end
 
 function combine_states(a::CPSTATE, b::CPSTATE, ninterfaces::Int)
@@ -171,14 +192,14 @@ function generate_knot_vector(state::CPSTATE, order::Int, ninterfaces::Int)
     end
 end
 
-function get_active_basefunction_in_layer(ilay::Int, order::Int, state::CPSTATE)
+function get_active_basefunctions_in_layer(ilay::Int, order::Int, state::CPSTATE)
     if state.state == _LUMPED
         return 1:(order+1)
     elseif state.state == _LAYERED
         return (1:order+1) .+ (ilay-1)*(order)
     elseif is_fully_discontiniuos(state)
         return (1:order+1) .+ (ilay-1)*(order+1)
-    elseif is_discontiniuos(state)
+    elseif has_discontinuity(state)
         addon = is_strong_discontiniuos(state) ? order : 0
         offset = 0
         for i in 1:ilay-1
@@ -198,7 +219,7 @@ function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, nbasef
     for i in 1:nbasefunctions_inplane
         cp_state = get_cpstate(state, i)
         for ilay in 1:nlayers
-            for ib in get_active_basefunction_in_layer(ilay, order, cp_state)
+            for ib in get_active_basefunctions_in_layer(ilay, order, cp_state)
                 for d in 1:dim_s
                     push!(active_layer_dofs[ilay], (ib-1)*dim_s + d + dof_offset)
                 end

@@ -27,7 +27,7 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
             # Loop through all nodes for this cell and set the state 
             # of the node to the state of the cell, if it is an "upgrade"
             for (i, nodeid) in enumerate(igashell.cell_connectivity[:, ic])
-                node_states[nodeid] = combine_states(node_states[nodeid], upgrade_to.cp_states[i], ninterfaces(igashell))
+                node_states[nodeid] = combine_states(node_states[nodeid], get_cpstate(upgrade_to, i), ninterfaces(igashell))
             end
         end
     end
@@ -43,7 +43,7 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
         
         cellnodes = igashell.cell_connectivity[:, ic]
         new_cellnode_states = node_states[cellnodes]
-        current_cellnode_states = igashell.adapdata.control_point_states[cellnodes]
+        current_cellnode_states = igashell.adaptivity.control_point_states[cellnodes]
 
         # Check if any of the nodes in the cell has been upgraded this timestep
         # If not, no upgraded is needed.

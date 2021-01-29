@@ -110,7 +110,7 @@ function get_upgrade_operator(adap::IGAShellAdaptivity, from::CPSTATE, to::CPSTA
         return _get_upgrade_operator(adap.weakdiscont2fullydiscont, adap.order, adap.interface_knots, from, to)
     elseif is_strong_discontiniuos(from) && is_fully_discontiniuos(to)
         return _get_upgrade_operator(adap.strongdiscont2fullydiscont, adap.order, adap.interface_knots, from, to)
-    elseif (is_layered(from) || is_lumped(from)) && is_discontiniuos(to)
+    elseif (is_layered(from) || is_lumped(from)) && has_discontinuity(to)
         return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
     # elseif is_discontiniuos(from) && is_discontiniuos(to)
         # return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
@@ -121,7 +121,7 @@ function get_upgrade_operator(adap::IGAShellAdaptivity, from::CPSTATE, to::CPSTA
 end
 
 function _get_upgrade_operator(dict::Dict, order::Int, interface_knots::Vector{Float64}, from::CPSTATE, to::CPSTATE)
-    @assert(is_discontiniuos(from) && is_fully_discontiniuos(to))
+    @assert(has_discontinuity(from) && is_fully_discontiniuos(to))
 
     return get!(dict, from.config) do
         return create_upgrade_operator(order, interface_knots, from, to)
