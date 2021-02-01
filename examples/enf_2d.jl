@@ -78,7 +78,7 @@ IgAShell.IGAShellData(;
     nqp_ooplane_per_layer     = 2,
     adaptable                 = true,
     small_deformations_theory = false,
-    LIMIT_UPGRADE_INTERFACE   = 0.01,
+    LIMIT_UPGRADE_INTERFACE   = 0.02,
     nqp_interface_order       = 4
 )  
 

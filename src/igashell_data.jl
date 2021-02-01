@@ -213,6 +213,26 @@ function get_active_basefunctions_in_layer(ilay::Int, order::Int, state::CPSTATE
     end
 end
 
+function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CPSTATE)
+    if is_fully_discontiniuos(state)
+        return (0:1) .+ (order+1)*(iint)
+    elseif is_strong_discontiniuos(c) || is_weak_discontiniuos(c)
+        addon = is_strong_discontiniuos(state) ? order : 0
+        offset = 0
+        for i in 1:iint-1
+            if is_interface_active(state, i) #Discontiniuos
+                offset += order+1
+            else #Lumped
+                offset += addon
+            end
+        end
+        return (1:2) .+ offset
+        error("test this")
+    else
+        return []
+    end
+end
+
 function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, nbasefunctions_inplane::Int, state::CELLSTATE)
     active_layer_dofs = [Int[] for _ in 1:nlayers]
     dof_offset = 0
@@ -238,7 +258,7 @@ function generate_active_interface_dofs(ninterfaces::Int, order::Int, dim_s::Int
     #active_inplane_basefunction = [Int[] for _ in 1:ninterfaces]
     dof_offset = 0
     for iinpf in 1:nbasefunctions_inplane
-        cp_state = get_cpstate(state, i)
+        cp_state = get_cpstate(state, iinpf)
         for iint in 1:ninterfaces
             if is_interface_active(cp_state, iint)
                 #push!(active_inplane_basefunction[iint], iinpf)

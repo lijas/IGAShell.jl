@@ -27,6 +27,11 @@ struct CachedOOPBasisValues{dim_p,T,M}
     active_layer_dofs_lumped::Vector{Vector{Int}}
     active_layer_dofs_layered::Vector{Vector{Int}}
     active_layer_dofs_discont::Vector{Vector{Int}}
+
+    #
+    active_interface_dofs_lumped::Vector{Vector{Int}}
+    active_interface_dofs_layered::Vector{Vector{Int}}
+    active_interface_dofs_discont::Vector{Vector{Int}}
 end
 
 function CachedOOPBasisValues(qr_cell_oop::QuadratureRule{1,RefCube,T}, 
@@ -82,11 +87,17 @@ function CachedOOPBasisValues(qr_cell_oop::QuadratureRule{1,RefCube,T},
     active_dofs_layered = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, LAYERED)
     active_dofs_discont = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, FULLY_DISCONTINIUOS)
 
+    #Active basis values
+    active_interface_dofs_lumped  = generate_active_interface_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, LUMPED)
+    active_interface_dofs_layered = generate_active_interface_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, LAYERED)
+    active_interface_dofs_discont = generate_active_interface_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, FULLY_DISCONTINIUOS)
+
     return CachedOOPBasisValues{dim_p,T,M}(a,b,c,d1,d2,
                                      e,f,g,h1,h2,
                                      k,l,m,n1,n2, 
                                      basis_values_sideface, basis_values_vertex,
-                                     active_dofs_lumped, active_dofs_layered, active_dofs_discont)
+                                     active_dofs_lumped, active_dofs_layered, active_dofs_discont,
+                                     active_interface_dofs_lumped, active_interface_dofs_layered, active_interface_dofs_discont)
 end
 
 struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
@@ -117,10 +128,6 @@ struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
     qr_vertices::Array{QuadratureRule{dim_p,RefCube,T}, 1}
 
     cache_values::CachedOOPBasisValues{dim_p,T,M}
-
-    active_layer_dofs::Vector{Vector{Int}}
-    active_interface_dofs::Vector{Vector{Int}}
-    active_local_interface_dofs::Vector{Vector{Int}}
 
     extraction_operators::Vector{IGA.BezierExtractionOperator{T}}
     oop_order::Int
@@ -252,10 +259,6 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     cell_values_cohesive_top = IGAShellValues(data.thickness, iqr_inp_cohesive, oqr_cohesive[2], mid_ip, getnbasefunctions(ip_discont))
     cell_values_cohesive_bot = IGAShellValues(data.thickness, iqr_inp_cohesive, oqr_cohesive[1], mid_ip, getnbasefunctions(ip_discont))
 
-    active_layer_dofs = [Int[] for _ in 1:nlayers(data)]
-    active_interface_dofs = [Int[] for _ in 1:ninterfaces(data)]
-    active_local_interface_dofs = [Int[] for _ in 1:ninterfaces(data)] 
-
     M = Tensors.n_components(Tensors.get_base(eltype(cache.basis_values_sideface[1].d²Ndξ²)))
 
     return IGAShellIntegrationData{dim_p,dim_s,T,typeof(cell_values),M}(
@@ -267,7 +270,6 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
         Ref(cell_values), #Ref(face_values),
         iqr, oqr, iqr_inp_cohesive, oqr_face, oqr_cohesive, iqr_sides, iqr_vertices,
         cache,
-        active_layer_dofs, active_interface_dofs, active_local_interface_dofs,
         C, order)
 end
 

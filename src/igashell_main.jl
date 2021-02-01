@@ -255,7 +255,7 @@ function build_facevalue!(igashell, vertex::VertexInterfaceIndex)
     return cv
 end 
 
-function build_active_layer_dofs(igashell::IGAShell, cellstate::CELLSTATE)
+function build_active_layer_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate::CELLSTATE) where {dim_p,dim_s}
 
     if is_lumped(cellstate)
         return intdata(igashell).cache_values.active_layer_dofs_lumped
@@ -264,12 +264,12 @@ function build_active_layer_dofs(igashell::IGAShell, cellstate::CELLSTATE)
     elseif is_fully_discontiniuos(cellstate)
         return intdata(igashell).cache_values.active_layer_dofs_discont
     else
-        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), JuAFEM.nnodes_per_cell(igashell), dim_s, states)
+        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), JuAFEM.nnodes_per_cell(igashell), dim_s, cellstate)
     end
 
 end
 
-function build_active_interface_dofs(igashell::IGAShell, cellstate::CELLSTATE)
+function build_active_interface_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate::CELLSTATE) where {dim_p,dim_s}
 
     if is_lumped(cellstate)
         return intdata(igashell).cache_values.active_interface_dofs_lumped
@@ -278,7 +278,7 @@ function build_active_interface_dofs(igashell::IGAShell, cellstate::CELLSTATE)
     elseif is_fully_discontiniuos(cellstate)
         return intdata(igashell).cache_values.active_interface_dofs_discont
     else
-        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), JuAFEM.nnodes_per_cell(igashell), dim_s, states)
+        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), JuAFEM.nnodes_per_cell(igashell), dim_s, cellstate)
     end
 
 end
@@ -318,7 +318,7 @@ function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cell
 
     end
 
-    return oop_cohesive_top_values. oop_cohesive_bot_values
+    return oop_cohesive_top_values, oop_cohesive_bot_values
 end
 
 @enum IGASHELL_ASSEMBLETYPE IGASHELL_FORCEVEC IGASHELL_STIFFMAT IGASHELL_FSTAR IGASHELL_DISSIPATION
@@ -427,7 +427,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         cv_cohesive_top, 
         cv_cohesive_bot = build_cohesive_cellvalue!(igashell, ic) 
 
-        active_interface_dofs = get_active_interface_dofs(igashell, cellstate)
+        active_interface_dofs = build_active_interface_dofs(igashell, cellstate)
 
         ⁿinterfacestates = state.prev_partstates[ic].interfacestates
         interfacestates = state.partstates[ic].interfacestates
