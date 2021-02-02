@@ -216,7 +216,7 @@ end
 function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CPSTATE)
     if is_fully_discontiniuos(state)
         return (0:1) .+ (order+1)*(iint)
-    elseif is_strong_discontiniuos(c) || is_weak_discontiniuos(c)
+    elseif is_strong_discontiniuos(state) || is_weak_discontiniuos(state)
         addon = is_strong_discontiniuos(state) ? order : 0
         offset = 0
         for i in 1:iint-1
@@ -226,10 +226,14 @@ function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CPS
                 offset += addon
             end
         end
-        return (1:2) .+ offset
         error("test this")
+        return (1:2) .+ offset
+    elseif is_lumped(state)
+        return 1:(order+1)
+    elseif is_layered(state)
+        return order*iint + 1
     else
-        return []
+        error("Wrong state")
     end
 end
 
@@ -254,24 +258,24 @@ end
 function generate_active_interface_dofs(ninterfaces::Int, order::Int, dim_s::Int, nbasefunctions_inplane::Int, state::CELLSTATE)
     nlayers = ninterfaces+1
 
+    top_active_dofs = [Int[] for _ in 1:ninterfaces]
+    bot_active_dofs = [Int[] for _ in 1:ninterfaces]
     active_interface_dofs = [Int[] for _ in 1:ninterfaces]
+
     #active_inplane_basefunction = [Int[] for _ in 1:ninterfaces]
     dof_offset = 0
     for iinpf in 1:nbasefunctions_inplane
         cp_state = get_cpstate(state, iinpf)
         for iint in 1:ninterfaces
-            if is_interface_active(cp_state, iint)
-                #push!(active_inplane_basefunction[iint], iinpf)
-                for ib in get_active_basefunctions_in_interface(iint, order, cp_state)
-                    for d in 1:dim_s
-                        push!(active_interface_dofs[iint], (ib-1)*dim_s + d + dof_offset)
-                    end
+            for ib in get_active_basefunctions_in_interface(iint, order, cp_state)
+                for d in 1:dim_s
+                    push!(active_interface_dofs[iint], (ib-1)*dim_s + d + dof_offset)
                 end
             end
         end
-        
-        dof_offset += ndofs_per_controlpoint(order, nlayers, nlayers-1, dim_s, cp_state)
+        dof_offset += ndofs_per_controlpoint(order, nlayers, ninterfaces, dim_s, cp_state)
     end
+
     return active_interface_dofs#, active_inplane_basefunction
 end
 

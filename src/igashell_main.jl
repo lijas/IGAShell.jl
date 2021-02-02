@@ -264,7 +264,7 @@ function build_active_layer_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate::CE
     elseif is_fully_discontiniuos(cellstate)
         return intdata(igashell).cache_values.active_layer_dofs_discont
     else
-        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), JuAFEM.nnodes_per_cell(igashell), dim_s, cellstate)
+        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), dim_s, JuAFEM.nnodes_per_cell(igashell), cellstate)
     end
 
 end
@@ -278,7 +278,7 @@ function build_active_interface_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate
     elseif is_fully_discontiniuos(cellstate)
         return intdata(igashell).cache_values.active_interface_dofs_discont
     else
-        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), JuAFEM.nnodes_per_cell(igashell), dim_s, cellstate)
+        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), dim_s, JuAFEM.nnodes_per_cell(igashell), cellstate)
     end
 
 end
@@ -444,12 +444,10 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         
         for iint in 1:ninterfaces(igashell)      
 
-            active_dofs = 1:JuAFEM.ndofs_per_cell(dh, cellid)# active_interface_dofs[iint]
+            active_dofs = active_interface_dofs[iint]
             
-            if is_mixed(cellstate) || is_weak_discontiniuos(cellstate) || is_strong_discontiniuos(cellstate)
-                if length(active_dofs) == 0
-                    continue
-                end
+            if !is_interface_active(cellstate, iint)
+                continue
             end
             
             ⁿstates =  @view ⁿinterfacestates[:, iint]
