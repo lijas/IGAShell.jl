@@ -88,14 +88,10 @@ function CachedOOPBasisValues(qr_cell_oop::QuadratureRule{1,RefCube,T},
     active_dofs_discont = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, FULLY_DISCONTINIUOS)
 
     #Active basis values
-    @show "LU"
     active_interface_dofs_lumped  = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, nbasefunctions_inplane, LUMPED)
-    @show "Ly"
     active_interface_dofs_layered = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, nbasefunctions_inplane, LAYERED)
-    @show "Di"
     active_interface_dofs_discont = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, nbasefunctions_inplane, FULLY_DISCONTINIUOS)
-    @show active_interface_dofs_discont
-    @show "-"
+
     return CachedOOPBasisValues{dim_p,T,M}(a,b,c,d1,d2,
                                      e,f,g,h1,h2,
                                      k,l,m,n1,n2, 
