@@ -139,29 +139,35 @@ end
 
 
 function cached_cell_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE)
+    ninterfaces = length(intdata.cache_values.active_interface_dofs_lumped)
+    
     is_lumped(i) && return intdata.cache_values.basis_values_lumped
     is_layered(i) && return intdata.cache_values.basis_values_layered
     is_fully_discontiniuos(i) && return intdata.cache_values.basis_values_discont
-    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_weak_discont, intdata.oqr)
-    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_strong_discont, intdata.oqr)
+    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_weak_discont, intdata.oqr)
+    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_strong_discont, intdata.oqr)
     error("wrong state")
 end
 
 function cached_cohesive_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE)
+    ninterfaces = length(intdata.cache_values.active_interface_dofs_lumped)
+    
     is_lumped(i) && return intdata.cache_values.basis_cohseive_lumped
     is_layered(i) && return intdata.cache_values.basis_cohesive_layered
     is_fully_discontiniuos(i) && return intdata.cache_values.basis_cohesive_discont
-    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_cohesive_weak_discont, intdata.qr_cohesive)
-    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_cohesive_strong_discont, intdata.qr_cohesive)
+    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_cohesive_weak_discont, intdata.qr_cohesive)
+    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_cohesive_strong_discont, intdata.qr_cohesive)
     error("wrong state")
 end
 
 function cached_face_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE, face::Int)::BasisValues{1,Float64,1}
+    ninterfaces = length(intdata.cache_values.active_interface_dofs_lumped)
+
     is_lumped(i) && return  intdata.cache_values.basis_values_lumped_face[face]
     is_layered(i) && return    intdata.cache_values.basis_values_layered_face[face]
     is_fully_discontiniuos(i) && return    intdata.cache_values.basis_values_discont_face[face]
-    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_weak_discont_face, intdata.qr_faces)[face]
-    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_strong_discont_face, intdata.qr_faces)[face]
+    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_weak_discont_face, intdata.qr_faces)[face]
+    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_strong_discont_face, intdata.qr_faces)[face]
     error("wrong state")
 end
 

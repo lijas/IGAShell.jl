@@ -371,6 +371,24 @@ end
     ninterfaces = 1
     IgAShell.insert_interface(IgAShell.LAYERED, 1, ninterfaces).state == IgAShell.FULLY_DISCONTINIUOS.state
 
+
+    #
+    order = 2
+    (IgAShell.get_active_basefunctions_in_interface(2, order, IgAShell.WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,))) .== [3,4]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(1, order, IgAShell.WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,))) .== [1,2,3]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(3, order, IgAShell.WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [6,7]) |> all
+
+    (IgAShell.get_active_basefunctions_in_interface(1, order, IgAShell.WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE((1,3,))) .== [3,4]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(2, order, IgAShell.WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE((1,3,))) .== [4,5,6]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(3, order, IgAShell.WEAK_DISCONTINIUOS_AT_INTERFACE_CPSTATE((1,3,))) .== [6,7]) |> all
+
+    (IgAShell.get_active_basefunctions_in_interface(1, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((1,3,))) .== [3,4]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(2, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((1,3,))) .== [6]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(3, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((1,3,))) .== [8,9]) |> all
+
+    (IgAShell.get_active_basefunctions_in_interface(1, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [3]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(2, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [5,6]) |> all
+    (IgAShell.get_active_basefunctions_in_interface(3, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [8,9]) |> all
 end
 
 #=

@@ -26,7 +26,7 @@ data = ProblemData(
 
 #interfacematerial = IGAShell.MatCohesive{dim}(λ_0,λ_f,τ,K)
 interfacematerial = MatCZBilinear(
-    K    = 1.0e5,
+    K    = 1.0e4,
     Gᴵ   = (1050/1000, 1050/1000, 211.0/1000 ),
     τᴹᵃˣ = 0.5.*(90.0, 90.0, 60.0),
     η    = 1.6
@@ -69,8 +69,8 @@ addvertexset!(data.grid, "zfixed", (x)-> x[1] ≈ 9.5)
 
 cellstates = [IgAShell.LAYERED for i in 1:NELX]
 cellstates[precracked_u] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
-cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACES((1,3))
-cellstates = [IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACES((1,3)) for i in 1:NELX]
+cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3))
+cellstates = [IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3)) for i in 1:NELX]
 
 interface_damage = zeros(ninterfaces, NELX)
 interface_damage[1, precracked_l] .= 1.0
@@ -177,8 +177,9 @@ solver = LocalDissipationSolver(
     sw2d         = 1.0,
     sw2i         = 1e-7,
     optitr       = 8,
-    maxitr       = 50,
+    maxitr       = 15,
     maxsteps     = 1000,
+    maxitr_first_step = 50,
     λ_max        = 700.0,
     λ_min        = -50.0,
     tol          = 1e-4,

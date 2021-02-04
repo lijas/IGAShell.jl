@@ -105,7 +105,7 @@ function is_interface_active(state::CELLSTATE, iint::Int)
     end
 
     if is_strong_discontiniuos(state) || is_weak_discontiniuos(state)
-        is_interface_active(first(state.cpstates), iint)
+        return is_interface_active(first(state.cpstates), iint)
     end
 
     error("Unreachable code...")
@@ -213,25 +213,41 @@ function get_active_basefunctions_in_layer(ilay::Int, order::Int, state::CPSTATE
     end
 end
 
-function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CPSTATE)
+function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CPSTATE)::UnitRange{Int}
     if is_fully_discontiniuos(state)
         return (0:1) .+ (order+1)*(iint)
-    elseif is_strong_discontiniuos(state) || is_weak_discontiniuos(state)
-        addon = is_strong_discontiniuos(state) ? order : 0
+    elseif is_strong_discontiniuos(state)
         offset = 0
         for i in 1:iint-1
+            offset += order
             if is_interface_active(state, i) #Discontiniuos
-                offset += order+1
-            else #Lumped
-                offset += addon
+                offset += 1
             end
         end
-        error("test this")
-        return (1:2) .+ offset
+
+        if is_interface_active(state, iint)
+            return (0:1) .+ (offset + (order + 1))
+        else
+            return (0:0) .+ (offset + (order + 1))
+        end
+    elseif is_weak_discontiniuos(state)
+        offset = 0
+        for i in 1:iint-1
+            if is_interface_active(state, i) 
+                offset += order+1
+            end
+        end
+
+        if is_interface_active(state, iint)
+            return (0:1) .+ (offset + (order + 1))
+        else
+            return (0:order) .+ (offset + 1)
+        end
+
     elseif is_lumped(state)
         return 1:(order+1)
     elseif is_layered(state)
-        return order*iint + 1
+        return (0:0) .+ (order*iint + 1)
     else
         error("Wrong state")
     end

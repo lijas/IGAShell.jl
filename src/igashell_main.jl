@@ -444,7 +444,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         
         for iint in 1:ninterfaces(igashell)      
 
-            active_dofs = active_interface_dofs[iint]
+            active_dofs = 1:JuAFEM.ndofs_per_cell(dh,ic)# active_interface_dofs[iint]
             
             if !is_interface_active(cellstate, iint)
                 continue
