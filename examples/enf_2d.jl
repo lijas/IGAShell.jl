@@ -78,7 +78,7 @@ IgAShell.IGAShellData(;
     nqp_ooplane_per_layer     = 2,
     adaptable                 = true,
     small_deformations_theory = false,
-    LIMIT_UPGRADE_INTERFACE   = 0.01,
+    LIMIT_UPGRADE_INTERFACE   = 0.04,
     nqp_interface_order       = 4
 )  
 
@@ -92,7 +92,7 @@ push!(data.parts, igashell)
 
 #
 data.output[] = Output(
-    interval = 5.0,
+    interval = 0.0,
     runname = "enf_2d",
     savepath = "./"
 )

@@ -147,13 +147,10 @@ function build_cellvalue!(igashell, cellstate::CELLSTATE)
 
     local cv
     if is_lumped(cellstate)
-        intdata(igashell).active_layer_dofs .= intdata(igashell).cache_values.active_layer_dofs_lumped
         cv =  intdata(igashell).cell_values_lumped
     elseif is_layered(cellstate)
-        intdata(igashell).active_layer_dofs .= intdata(igashell).cache_values.active_layer_dofs_layered
         cv =  intdata(igashell).cell_values_layered
     elseif is_fully_discontiniuos(cellstate)
-        intdata(igashell).active_layer_dofs .= intdata(igashell).cache_values.active_layer_dofs_discont
         cv =  intdata(igashell).cell_values_discont
     elseif has_discontinuity(cellstate) || is_mixed(cellstate)
         cv = intdata(igashell).cell_values_mixed
@@ -258,38 +255,48 @@ function build_facevalue!(igashell, vertex::VertexInterfaceIndex)
     return cv
 end 
 
-function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellstate::CELLSTATE, face::Int=-1) where {dim_p,dim_s,T}
+function build_active_layer_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate::CELLSTATE) where {dim_p,dim_s}
 
-    order = ooplane_order(layerdata(igashell))
+    if is_lumped(cellstate)
+        return intdata(igashell).cache_values.active_layer_dofs_lumped
+    elseif is_layered(cellstate)
+        return intdata(igashell).cache_values.active_layer_dofs_layered
+    elseif is_fully_discontiniuos(cellstate)
+        return intdata(igashell).cache_values.active_layer_dofs_discont
+    else
+        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), dim_s, JuAFEM.nnodes_per_cell(igashell), cellstate)
+    end
+
+end
+
+function build_active_interface_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate::CELLSTATE) where {dim_p,dim_s}
+
+    if is_lumped(cellstate)
+        return intdata(igashell).cache_values.active_interface_dofs_lumped
+    elseif is_layered(cellstate)
+        return intdata(igashell).cache_values.active_interface_dofs_layered
+    elseif is_fully_discontiniuos(cellstate)
+        return intdata(igashell).cache_values.active_interface_dofs_discont
+    else
+        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), dim_s, JuAFEM.nnodes_per_cell(igashell), cellstate)
+    end
+
+end
+
+function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellstate::CELLSTATE, faceidx::Int = -1) where {dim_p,dim_s,T}
 
     oop_values = BasisValues{1,T,1}[]
-    
-    #reset active layer dofs
-    intdata(igashell).active_layer_dofs .= [T[] for i in 1:nlayers(igashell)]
-    active_layer_dofs = intdata(igashell).active_layer_dofs
 
-    dof_offset = 0
     for i in 1:JuAFEM.nnodes_per_cell(igashell)
         cp_state = get_cpstate(cellstate, i)
 
-        #integration points in cell
-        local cv_oop
-        if face == -1
-            cv_oop = cached_cell_basisvalues(intdata(igashell), cp_state)
+        if faceidx != -1
+            cv_oop = cached_face_basisvalues(intdata(igashell), cp_state, faceidx)
         else
-            cv_oop = cached_face_basisvalues(intdata(igashell), cp_state, face)
+            cv_oop = cached_cell_basisvalues(intdata(igashell), cp_state)
         end
-        push!(oop_values, cv_oop)
 
-        # Generate list with the active dofs for each layer
-        for ilay in 1:nlayers(igashell)
-            for ib in get_active_basefunctions_in_layer(ilay, order, cp_state)
-                for d in 1:dim_s
-                    push!(active_layer_dofs[ilay], (ib-1)*dim_s + d + dof_offset)
-                end
-            end
-        end
-        dof_offset += ndofs_per_controlpoint(igashell, cp_state)
+        push!(oop_values, cv_oop)
     end
 
 
@@ -298,27 +305,6 @@ end
 
 function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellstate::CELLSTATE) where {dim_p,dim_s,T}
     
-    #Get cellconectivity
-    r = ooplane_order(layerdata(igashell))
-
-    top_active_dofs = [Int[] for _ in 1:ninterfaces(igashell)]
-    bot_active_dofs = [Int[] for _ in 1:ninterfaces(igashell)]
-
-    #TODO: Remove top_active_local_dofs and rename bot_active_local_dofs
-    active_local_dofs = [Int[] for _ in 1:ninterfaces(igashell)]
-
-    #Counters
-    current_dof = 0; 
-    current_local_dof = zeros(Int, ninterfaces(igashell))
-
-    #...
-    active_interface_dofs = intdata(igashell).active_interface_dofs
-    resize!.(active_interface_dofs, 0)
-
-    active_local_interface_dofs = intdata(igashell).active_local_interface_dofs
-    resize!.(active_local_interface_dofs, 0)
-
-    #..
     oop_cohesive_top_values = BasisValues{1,T,1}[]
     oop_cohesive_bot_values = BasisValues{1,T,1}[]
 
@@ -330,92 +316,9 @@ function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cell
         push!(oop_cohesive_top_values, cached_top_values)
         push!(oop_cohesive_bot_values, cached_bottom_values)
 
-        #active_interface_dofs!(local_interface_dofs, global_interface_dofs, cp_state, r, dim_s, dof_offset)
-        if ninterfaces(igashell) > 0
-            if has_discontinuity(cellstate)
-                current_dof += r*dim_s
-                for iint in 1:ninterfaces(igashell)
-                    if is_interface_active(cp_state, iint)
-                        for d in 1:dim_s
-                            push!(top_active_dofs[iint], current_dof + dim_s + d)
-                            push!(bot_active_dofs[iint], current_dof + d)
-
-                            #local dofs
-                            push!(active_local_dofs[iint], current_local_dof[iint] + d)
-                        end
-                        for d in 1:dim_s
-                            push!(active_local_dofs[iint], current_local_dof[iint] + dim_s + d)
-                        end     
-                        current_dof += (r+1)*dim_s           
-                    else                    
-                        if is_strong_discontiniuos(cp_state) 
-                            current_dof += r*dim_s 
-                        end
-                    end
-                end
-                current_dof += dim_s
-            elseif is_layered(cp_state)
-                current_dof += r*dim_s
-                for iint in 1:ninterfaces(igashell)
-                    for d in 1:dim_s
-                        push!(top_active_dofs[iint], current_dof + d)
-                        push!(bot_active_dofs[iint], current_dof + d)
-                    end
-                    current_dof += r*dim_s   
-                end
-                current_dof += dim_s
-            elseif is_lumped(cp_state)
-                for ir in 1:r+1
-                    for d in 1:dim_s
-                        push!(top_active_dofs[iint], current_dof + (ir-1)*dim_s + d)
-                        push!(bot_active_dofs[iint], current_dof + (ir-1)*dim_s + d)
-                    end
-                end
-                current_dof += ndofs_per_controlpoint(igashell, cp_state)
-            end
-            
-        end
-        current_local_dof .+= dim_s*2
-    end
-
-    for iint in 1:ninterfaces(igashell)
-        append!(active_interface_dofs[iint], bot_active_dofs[iint])
-        append!(active_interface_dofs[iint], top_active_dofs[iint])
-        
-        append!(active_local_interface_dofs[iint], active_local_dofs[iint] .* -1) 
     end
 
     return oop_cohesive_top_values, oop_cohesive_bot_values
-
-end
-
-function interface_displacements(igashell::IGAShell, iint::Int, ue::Vector{T}, Xᵇ::Vector{Vec{dim_s,T}}) where {dim_s, T}    
-    error("Can delete")
-    nnodes = JuAFEM.nnodes_per_cell(igashell)
-
-    offset = (iint-1) * nnodes#*2
-
-    cv_top = intdata(igashell).cell_values_cohesive_top
-    cv_bot = intdata(igashell).cell_values_cohesive_bot
-
-    uvec = zeros(Vec{dim_s,T}, nnodes*2)
-    xvec = zeros(Vec{dim_s,T}, nnodes*2)
-    for ip in 1:nnodes
-
-        u_m = function_value(cv_bot, ip+offset, ue)
-        u_p = function_value(cv_top, ip+offset, ue)
-
-        uvec[ip] = u_m
-        uvec[ip + nnodes] = u_p
-
-        x_m = spatial_coordinate(cv_bot, ip+offset, Xᵇ)
-        x_p = spatial_coordinate(cv_top, ip+offset, Xᵇ)
-        xvec[ip] = x_m
-        xvec[ip + nnodes] = x_p
-    end
-
-    return uvec, xvec
-
 end
 
 @enum IGASHELL_ASSEMBLETYPE IGASHELL_FORCEVEC IGASHELL_STIFFMAT IGASHELL_FSTAR IGASHELL_DISSIPATION
@@ -453,6 +356,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
     @timeit "Shell loop" for (ic, cellid) in enumerate(igashell.cellset)
         cellstate = getcellstate(adapdata(igashell), ic)
         cv = build_cellvalue!(igashell, cellstate)
+        active_layer_dofs = build_active_layer_dofs(igashell, cellstate)
         
         Ce = get_extraction_operator(intdata(igashell), ic)
         IGA.set_bezier_operator!(cv, Ce)
@@ -472,7 +376,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         materialstates = state.partstates[ic].materialstates
 
         for ilay in 1:nlayers(igashell)
-            active_dofs = get_active_layer_dofs(intdata(igashell), ilay)
+            active_dofs = active_layer_dofs[ilay]
 
             ue_layer = ue[active_dofs]
             ndofs_layer = length(active_dofs)
@@ -523,6 +427,8 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         cv_cohesive_top, 
         cv_cohesive_bot = build_cohesive_cellvalue!(igashell, ic) 
 
+        active_interface_dofs = build_active_interface_dofs(igashell, cellstate)
+
         ⁿinterfacestates = state.prev_partstates[ic].interfacestates
         interfacestates = state.partstates[ic].interfacestates
 
@@ -538,12 +444,10 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         
         for iint in 1:ninterfaces(igashell)      
 
-            active_dofs = 1:JuAFEM.ndofs_per_cell(dh, cellid)#get_active_interface_dofs(intdata(igashell), iint)
+            active_dofs = 1:JuAFEM.ndofs_per_cell(dh,ic)# active_interface_dofs[iint]
             
-            if is_mixed(cellstate) || is_weak_discontiniuos(cellstate) || is_strong_discontiniuos(cellstate)
-                if length(active_dofs) == 0
-                    continue
-                end
+            if !is_interface_active(cellstate, iint)
+                continue
             end
             
             ⁿstates =  @view ⁿinterfacestates[:, iint]

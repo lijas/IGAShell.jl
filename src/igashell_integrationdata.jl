@@ -27,6 +27,11 @@ struct CachedOOPBasisValues{dim_p,T,M}
     active_layer_dofs_lumped::Vector{Vector{Int}}
     active_layer_dofs_layered::Vector{Vector{Int}}
     active_layer_dofs_discont::Vector{Vector{Int}}
+
+    #
+    active_interface_dofs_lumped::Vector{Vector{Int}}
+    active_interface_dofs_layered::Vector{Vector{Int}}
+    active_interface_dofs_discont::Vector{Vector{Int}}
 end
 
 function CachedOOPBasisValues(qr_cell_oop::QuadratureRule{1,RefCube,T}, 
@@ -82,11 +87,17 @@ function CachedOOPBasisValues(qr_cell_oop::QuadratureRule{1,RefCube,T},
     active_dofs_layered = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, LAYERED)
     active_dofs_discont = generate_active_layer_dofs(nlayers, ooplane_order, dim_s, nbasefunctions_inplane, FULLY_DISCONTINIUOS)
 
+    #Active basis values
+    active_interface_dofs_lumped  = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, nbasefunctions_inplane, LUMPED)
+    active_interface_dofs_layered = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, nbasefunctions_inplane, LAYERED)
+    active_interface_dofs_discont = generate_active_interface_dofs(ninterfaces, ooplane_order, dim_s, nbasefunctions_inplane, FULLY_DISCONTINIUOS)
+
     return CachedOOPBasisValues{dim_p,T,M}(a,b,c,d1,d2,
                                      e,f,g,h1,h2,
                                      k,l,m,n1,n2, 
                                      basis_values_sideface, basis_values_vertex,
-                                     active_dofs_lumped, active_dofs_layered, active_dofs_discont)
+                                     active_dofs_lumped, active_dofs_layered, active_dofs_discont,
+                                     active_interface_dofs_lumped, active_interface_dofs_layered, active_interface_dofs_discont)
 end
 
 struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
@@ -118,39 +129,41 @@ struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
 
     cache_values::CachedOOPBasisValues{dim_p,T,M}
 
-    active_layer_dofs::Vector{Vector{Int}}
-    active_interface_dofs::Vector{Vector{Int}}
-    active_local_interface_dofs::Vector{Vector{Int}}
-
     extraction_operators::Vector{IGA.BezierExtractionOperator{T}}
     oop_order::Int
 end
 
 
 function cached_cell_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE)
+    ninterfaces = length(intdata.cache_values.active_interface_dofs_lumped)
+    
     is_lumped(i) && return intdata.cache_values.basis_values_lumped
     is_layered(i) && return intdata.cache_values.basis_values_layered
     is_fully_discontiniuos(i) && return intdata.cache_values.basis_values_discont
-    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_weak_discont, intdata.oqr)
-    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_strong_discont, intdata.oqr)
+    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_weak_discont, intdata.oqr)
+    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_strong_discont, intdata.oqr)
     error("wrong state")
 end
 
 function cached_cohesive_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE)
+    ninterfaces = length(intdata.cache_values.active_interface_dofs_lumped)
+    
     is_lumped(i) && return intdata.cache_values.basis_cohseive_lumped
     is_layered(i) && return intdata.cache_values.basis_cohesive_layered
     is_fully_discontiniuos(i) && return intdata.cache_values.basis_cohesive_discont
-    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_cohesive_weak_discont, intdata.qr_cohesive)
-    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_cohesive_strong_discont, intdata.qr_cohesive)
+    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_cohesive_weak_discont, intdata.qr_cohesive)
+    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_cohesive_strong_discont, intdata.qr_cohesive)
     error("wrong state")
 end
 
 function cached_face_basisvalues(intdata::IGAShellIntegrationData, i::CPSTATE, face::Int)::BasisValues{1,Float64,1}
+    ninterfaces = length(intdata.cache_values.active_interface_dofs_lumped)
+
     is_lumped(i) && return  intdata.cache_values.basis_values_lumped_face[face]
     is_layered(i) && return    intdata.cache_values.basis_values_layered_face[face]
     is_fully_discontiniuos(i) && return    intdata.cache_values.basis_values_discont_face[face]
-    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_weak_discont_face, intdata.qr_faces)[face]
-    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, length(intdata.active_interface_dofs), i, intdata.cache_values.basis_values_strong_discont_face, intdata.qr_faces)[face]
+    is_weak_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_weak_discont_face, intdata.qr_faces)[face]
+    is_strong_discontiniuos(i) && return get_or_create_discontinious_basisvalues!(intdata.oop_order, ninterfaces, i, intdata.cache_values.basis_values_strong_discont_face, intdata.qr_faces)[face]
     error("wrong state")
 end
 
@@ -186,14 +199,6 @@ get_oop_quadraturerule(intdata::IGAShellIntegrationData) = intdata.oqr
 get_inp_quadraturerule(intdata::IGAShellIntegrationData) = intdata.iqr
 get_face_qr(intdata::IGAShellIntegrationData, face::Int) = intdata.qr_faces[face]
 get_vertex_qr(intdata::IGAShellIntegrationData, vertex::Int) = intdata.qr_vertices[vertex]
-
-function get_active_interface_dofs(intdata::IGAShellIntegrationData, iint::Int)
-    return intdata.active_interface_dofs[iint]
-end
-
-function get_active_layer_dofs(intdata::IGAShellIntegrationData, iint::Int)
-    return intdata.active_layer_dofs[iint]
-end
 
 function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IGA.BezierExtractionOperator{T}}) where {dim_p,dim_s,T}
     
@@ -260,10 +265,6 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     cell_values_cohesive_top = IGAShellValues(data.thickness, iqr_inp_cohesive, oqr_cohesive[2], mid_ip, getnbasefunctions(ip_discont))
     cell_values_cohesive_bot = IGAShellValues(data.thickness, iqr_inp_cohesive, oqr_cohesive[1], mid_ip, getnbasefunctions(ip_discont))
 
-    active_layer_dofs = [Int[] for _ in 1:nlayers(data)]
-    active_interface_dofs = [Int[] for _ in 1:ninterfaces(data)]
-    active_local_interface_dofs = [Int[] for _ in 1:ninterfaces(data)] 
-
     M = Tensors.n_components(Tensors.get_base(eltype(cache.basis_values_sideface[1].d²Ndξ²)))
 
     return IGAShellIntegrationData{dim_p,dim_s,T,typeof(cell_values),M}(
@@ -275,7 +276,6 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
         Ref(cell_values), #Ref(face_values),
         iqr, oqr, iqr_inp_cohesive, oqr_face, oqr_cohesive, iqr_sides, iqr_vertices,
         cache,
-        active_layer_dofs, active_interface_dofs, active_local_interface_dofs,
         C, order)
 end
 

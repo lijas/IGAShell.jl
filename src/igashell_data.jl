@@ -105,7 +105,7 @@ function is_interface_active(state::CELLSTATE, iint::Int)
     end
 
     if is_strong_discontiniuos(state) || is_weak_discontiniuos(state)
-        is_interface_active(first(state.cpstates), iint)
+        return is_interface_active(first(state.cpstates), iint)
     end
 
     error("Unreachable code...")
@@ -213,6 +213,46 @@ function get_active_basefunctions_in_layer(ilay::Int, order::Int, state::CPSTATE
     end
 end
 
+function get_active_basefunctions_in_interface(iint::Int, order::Int, state::CPSTATE)::UnitRange{Int}
+    if is_fully_discontiniuos(state)
+        return (0:1) .+ (order+1)*(iint)
+    elseif is_strong_discontiniuos(state)
+        offset = 0
+        for i in 1:iint-1
+            offset += order
+            if is_interface_active(state, i) #Discontiniuos
+                offset += 1
+            end
+        end
+
+        if is_interface_active(state, iint)
+            return (0:1) .+ (offset + (order + 1))
+        else
+            return (0:0) .+ (offset + (order + 1))
+        end
+    elseif is_weak_discontiniuos(state)
+        offset = 0
+        for i in 1:iint-1
+            if is_interface_active(state, i) 
+                offset += order+1
+            end
+        end
+
+        if is_interface_active(state, iint)
+            return (0:1) .+ (offset + (order + 1))
+        else
+            return (0:order) .+ (offset + 1)
+        end
+
+    elseif is_lumped(state)
+        return 1:(order+1)
+    elseif is_layered(state)
+        return (0:0) .+ (order*iint + 1)
+    else
+        error("Wrong state")
+    end
+end
+
 function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, nbasefunctions_inplane::Int, state::CELLSTATE)
     active_layer_dofs = [Int[] for _ in 1:nlayers]
     dof_offset = 0
@@ -229,6 +269,30 @@ function generate_active_layer_dofs(nlayers::Int, order::Int, dim_s::Int, nbasef
         dof_offset += ndofs_per_controlpoint(order, nlayers, nlayers-1, dim_s, cp_state)
     end
     return active_layer_dofs
+end
+
+function generate_active_interface_dofs(ninterfaces::Int, order::Int, dim_s::Int, nbasefunctions_inplane::Int, state::CELLSTATE)
+    nlayers = ninterfaces+1
+
+    top_active_dofs = [Int[] for _ in 1:ninterfaces]
+    bot_active_dofs = [Int[] for _ in 1:ninterfaces]
+    active_interface_dofs = [Int[] for _ in 1:ninterfaces]
+
+    #active_inplane_basefunction = [Int[] for _ in 1:ninterfaces]
+    dof_offset = 0
+    for iinpf in 1:nbasefunctions_inplane
+        cp_state = get_cpstate(state, iinpf)
+        for iint in 1:ninterfaces
+            for ib in get_active_basefunctions_in_interface(iint, order, cp_state)
+                for d in 1:dim_s
+                    push!(active_interface_dofs[iint], (ib-1)*dim_s + d + dof_offset)
+                end
+            end
+        end
+        dof_offset += ndofs_per_controlpoint(order, nlayers, ninterfaces, dim_s, cp_state)
+    end
+
+    return active_interface_dofs#, active_inplane_basefunction
 end
 
 function ndofs_per_controlpoint(ooplane_order, nlayers, ninterfaces, dim_s, state::CPSTATE)
