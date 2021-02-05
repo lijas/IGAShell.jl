@@ -131,7 +131,7 @@ push!(data.external_forces, etf)
 
 #
 output = OutputData(
-    type = IgAShell.IGAShellBCOutput(
+    type = IGAShellBCOutput(
         igashell = igashell,
         comps = [DIM]
     ),
@@ -154,21 +154,26 @@ vtkoutput = VTKNodeOutput(
 )
 Five.push_vtkoutput!(data.output[], vtkoutput)
 
-#=
-#Stress output
-postcells = [50, 75, 90]
-stress_output = IGAShell.IGAShellStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
-data.outputs["Stress at 50%"] = stress_output
 
-stress_output = IGAShell.IGAShellRecovoredStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
-data.outputs["RS at 50%"] = stress_output=#
-
-#=solver = NewtonSolver(
-    Δt0 = 0.1,
-    Δt_max = 0.1,
-
+#
+output = OutputData(
+    type = IGAShellStressOutput(
+        igashell = igashell,
+    ),
+    interval = 0.0,
+    set      = [50, 75]
 )
-=#
+data.outputdata["Stress at 50%"] = output
+
+#
+output = OutputData(
+    type = IGAShellRecovoredStressOutput(
+        igashell = igashell,
+    ),
+    interval = 0.0,
+    set      = [50, 75]
+)
+data.outputdata["RS at 50%"] = output
 
 state, globaldata = build_problem(data) do dh, parts, dbc
     instructions = IgAShell.initial_upgrade_of_dofhandler(dh, igashell)
