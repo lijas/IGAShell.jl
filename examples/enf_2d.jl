@@ -2,16 +2,16 @@ using Five
 using IgAShell
 
 #Dimension
-const DIM = 2
-const NELX = 175
-const NELY = 1
+DIM = 2
+NELX = 175
+NELY = 1
 
-const ORDERS = (2,2)
+ORDERS = (2,2)
 
-const L = 120.0
-const h = 4.0
-const b = 20.0
-const a0 = 46.9
+L = 120.0
+h = 4.0
+b = 20.0
+a0 = 46.9
 
 angles = deg2rad.([0.0, 0.0])
 nlayers = length(angles)
