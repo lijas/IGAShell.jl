@@ -2,16 +2,16 @@ using Five
 using IgAShell
 
 #Dimension
-DIM = 2
-NELX = 175
-NELY = 1
+const DIM = 2
+const NELX = 175
+const NELY = 1
 
-ORDERS = (2,2)
+const ORDERS = (2,2)
 
-L = 120.0
-h = 4.0
-b = 20.0
-a0 = 46.9
+const L = 120.0
+const h = 4.0
+const b = 20.0
+const a0 = 46.9
 
 angles = deg2rad.([0.0, 0.0])
 nlayers = length(angles)
@@ -131,7 +131,7 @@ push!(data.external_forces, etf)
 
 #
 output = OutputData(
-    type = IGAShellBCOutput(
+    type = IgAShell.IGAShellBCOutput(
         igashell = igashell,
         comps = [DIM]
     ),
@@ -154,26 +154,21 @@ vtkoutput = VTKNodeOutput(
 )
 Five.push_vtkoutput!(data.output[], vtkoutput)
 
+#=
+#Stress output
+postcells = [50, 75, 90]
+stress_output = IGAShell.IGAShellStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
+data.outputs["Stress at 50%"] = stress_output
 
-#
-output = OutputData(
-    type = IGAShellStressOutput(
-        igashell = igashell,
-    ),
-    interval = 0.0,
-    set      = [50, 75]
-)
-data.outputdata["Stress at 50%"] = output
+stress_output = IGAShell.IGAShellRecovoredStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
+data.outputs["RS at 50%"] = stress_output=#
 
-#
-output = OutputData(
-    type = IGAShellRecovoredStressOutput(
-        igashell = igashell,
-    ),
-    interval = 0.0,
-    set      = [50, 75]
+#=solver = NewtonSolver(
+    Δt0 = 0.1,
+    Δt_max = 0.1,
+
 )
-data.outputdata["RS at 50%"] = output
+=#
 
 state, globaldata = build_problem(data) do dh, parts, dbc
     instructions = IgAShell.initial_upgrade_of_dofhandler(dh, igashell)

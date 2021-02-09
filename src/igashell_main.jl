@@ -74,10 +74,10 @@ function get_inplane_qp_range(n_qp_per_layer::Int, n_inpqp::Int, ilayer::Int, ro
     return (1:n_inpqp) .+ offset
 end
 
-function _igashell_input_checks(data::IGAShellData{dim_p, dim_s}, cellset::AbstractVector{Int}, cell_connectivity::Matrix{Int}) where {dim_s,dim_p}
+function _igashell_input_checks(data::IGAShellData, cellset::AbstractVector{Int}, cell_connectivity::Matrix{Int})
 
     @assert(!any(is_mixed.(data.initial_cellstates)))
-    @assert( dim_s == length(data.orders) )
+
     #etc...
 end
 
@@ -545,7 +545,7 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         
         cellstate = getcellstate(adapdata(igashell), ic)
 
-        if !is_lumped(cellstate) && !is_layered(cellstate)
+        if !is_lumped(cellstate)
             continue
         end
 
@@ -569,13 +569,13 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
                     cellid=cellid, ic=ic)
 
         #Build basis_values for cell
-        cv = build_cellvalue!(igashell, cellstate)
+        cv = build_cellvalue!(igashell, ic)
         IGA.set_bezier_operator!(cv, Ce)
         reinit!(cv, Xᵇ)
 
         #Build basis_values for stress_recovory
         cv_sr = intdata(igashell).cell_values_sr
-        oop_values = _build_oop_basisvalue!(igashell, cellstate)
+        oop_values = _build_oop_basisvalue!(igashell, ic, -1)
         set_oop_basefunctions!(cv_sr, oop_values)
         IGA.set_bezier_operator!(cv_sr, Ce)
         reinit!(cv_sr, Xᵇ)
