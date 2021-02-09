@@ -11,7 +11,10 @@ end
 function IGAShellExternalForce(; 
     set, 
     func::Function, 
-    igashell::IGAShell)
+    igashell::IGAShell{dim_p, dim_s, T}) where {T, dim_p, dim_s}
+
+    @assert( dim_s == length(func(zero(Vec{dim_s,T}), 0.0)) )
+
 
     return IGAShellExternalForce{typeof(igashell)}(collect(set), func, Base.RefValue(igashell))
 end
@@ -38,6 +41,8 @@ function Five.apply_external_force!(ef::IGAShellExternalForce{P}, state::StateVa
     for faceidx in ef.faceset
         #Note: faceidx can be FaceIndex EdgeIndex, CellIndex(Int) etc...
         cellid = faceidx[1]
+        local_cellid = findfirst((i)->i==cellid, igashell.cellset)
+        cellstate = getcellstate(igashell, local_cellid)
 
         #Celldofs
         ndofs = ndofs_per_cell(dh, cellid)
@@ -50,7 +55,6 @@ function Five.apply_external_force!(ef::IGAShellExternalForce{P}, state::StateVa
         JuAFEM.celldofs!(celldofs, dh, cellid)
 
         #Bezier and cell values
-        local_cellid = findfirst((i)->i==cellid, igashell.cellset)
         Ce = get_extraction_operator(intdata(igashell), local_cellid)
         Xᵇ .= IGA.compute_bezier_points(Ce, X)
         

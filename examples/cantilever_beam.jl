@@ -3,9 +3,10 @@ using IgAShell
 
 #Dimension
 DIM = 3
-NELX = 50
-NELY = 3
-ORDERS = (3,3,2)
+NELX = 51
+NELY = 5
+ORDERS = (3,3,3)
+@assert(isodd(NELY)) #So outputed cell for stresses is in the center
 
 #Geometry
 P = 1.0
@@ -48,9 +49,10 @@ addedgeset!(data.grid, "left", (x)-> x[1] ≈ 0.0)
 topfaceset = [FaceIndex(cellid, 2) for cellid in 1:getncells(data.grid)]
 addedgeset!(data.grid, "tip", (x)->x[1] ≈ L)
 partset1 = collect(1:length(data.grid.cells))
+postcell = ceil(Int, 0.5*(NELX*NELY))
 
 #
-cellstates = [IgAShell.LUMPED for i in 1:getncells(data.grid)]
+cellstates = [IgAShell.LAYERED for i in 1:getncells(data.grid)]
 interface_damage = zeros(ninterfaces, getncells(data.grid))
 
 #IGAshell data
@@ -66,9 +68,9 @@ IgAShell.IGAShellData(;
     initial_cellstates        = cellstates,
     initial_interface_damages = interface_damage,
     nqp_inplane_order         = 3,
-    nqp_ooplane_per_layer     = 2,
+    nqp_ooplane_per_layer     = 5,
     adaptable                 = false,
-    small_deformations_theory = false,
+    small_deformations_theory = true,
     LIMIT_UPGRADE_INTERFACE   = 0.04,
     nqp_interface_order       = 4
 )  
@@ -131,14 +133,26 @@ vtkoutput = VTKNodeOutput(
 )
 Five.push_vtkoutput!(data.output[], vtkoutput)
 
+output = OutputData(
+    type = IGAShellStressOutput(
+        igashell = igashell,
+    ),
+    interval = 0.0,
+    set      = [postcell]
+)
+data.outputdata["Stress at 50%"] = output
 
-#Stress output
-postcells = [50, 75, 90]
-stress_output = IGAShell.IGAShellStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
-data.outputs["Stress at 50%"] = stress_output
+#
+output = OutputData(
+    type = IGAShellRecovoredStressOutput(
+        igashell = igashell,
+    ),
+    interval = 0.0,
+    set      = [postcell]
+)
+data.outputdata["RS at 50%"] = output
 
-stress_output = IGAShell.IGAShellRecovoredStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
-data.outputs["RS at 50%"] = stress_output
+#
 state, globaldata = build_problem(data) do dh, parts, dbc
     instructions = IgAShell.initial_upgrade_of_dofhandler(dh, igashell)
     Five.update_dofhandler!(dh, StateVariables(Float64, ndofs(dh)), instructions)
@@ -157,8 +171,39 @@ solver = NewtonSolver(
 output = solvethis(solver, state, globaldata)
 
 if true
+    using Plots; pyplot(); PyPlot.pygui(true)
+
     d = [output.outputdata["maxdisp"].data[i].displacements for i in 1:length(output.outputdata["maxdisp"].data)]
     f = [output.outputdata["maxdisp"].data[i].forces for i in 1:length(output.outputdata["maxdisp"].data)]
+
+    σᶻˣ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻˣ)
+    σᶻʸ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻʸ)
+    σᶻᶻ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻᶻ)
+    ζ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :ζ)
+
+    fig = plot(reuse=false, layout = (2,3))
+    plot!(fig[4], σᶻᶻ_vec, ζ_vec, label = "recovered")
+    plot!(fig[5], σᶻʸ_vec, ζ_vec, label = "recovered")
+    plot!(fig[6], σᶻˣ_vec, ζ_vec, label = "recovered")
+
+    #
+    σxx_driver = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 1, 1)
+    σyy_driver = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 2, 2)
+    σxy_driver = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 1, 2)
+
+    zcoords = getindex.(output.outputdata["Stress at 50%"].data[end][1].local_coords, 3)
+    σᶻˣ_driver = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 1, 3)
+    σᶻʸ_driver = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 2, 3)
+    σᶻᶻ_driver = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 3, 3)
+    zcoords = getindex.(output.outputdata["Stress at 50%"].data[end][1].local_coords, 3)
+    zcoords .-= mean(zcoords)
+
+    plot!(fig[1], σxx_driver, zcoords, label = "driver")
+    plot!(fig[2], σyy_driver, zcoords, label = "driver")
+    plot!(fig[3], σxy_driver, zcoords, label = "driver")
+    plot!(fig[4], σᶻᶻ_driver, zcoords, label = "driver")
+    plot!(fig[5], σᶻʸ_driver, zcoords, label = "driver")
+    plot!(fig[6], σᶻˣ_driver, zcoords, label = "driver")
 end
 
 

@@ -545,7 +545,7 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         
         cellstate = getcellstate(adapdata(igashell), ic)
 
-        if !is_lumped(cellstate)
+        if !is_lumped(cellstate) && !is_layered(cellstate)
             continue
         end
 
