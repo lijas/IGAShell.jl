@@ -42,7 +42,7 @@ function Five.collect_output!(output::IGAShellStressOutput, state::StateVariable
         ts = ThroughThicknessStresses()
 
         #Get cellstate
-        local_id = findfirst((i)->i==cellid, cellset)
+        local_id = findfirst((i)->i==cellid, igashell.cellset)
         cellstate = getcellstate(igashell, local_id)
 
         Ce = get_extraction_operator(intdata(igashell), local_id)
@@ -74,7 +74,7 @@ function Five.collect_output!(output::IGAShellStressOutput, state::StateVariable
             
             for _ in 1:getnquadpoints_ooplane_per_layer(igashell)
                 iqp +=1 
-                σ, x_glob, x_loc= _eval_stress_center(cv_sr, igashell.layerdata.layer_materials[ilay], iqp, Xᵇ, ue_layer, active_dofs, small_deformations)
+                σ, x_glob, x_loc = _eval_stress_center(cv_sr, igashell.layerdata.layer_materials[ilay], iqp, Xᵇ, ue_layer, active_dofs, small_deformations)
 
                 push!(ts.local_coords, x_loc)
                 push!(ts.global_coords, x_glob)
@@ -162,19 +162,7 @@ function Five.collect_output!(output::IGAShellRecovoredStressOutput, state::Stat
 
     recovered_stresses = [RecoveredStresses{T}[] for _ in cellset]
     for (ic, cellid) in enumerate(cellset)
-
         local_id = findfirst((i)->i==cellid, igashell.cellset)
-
-        # Get the mid coord of cell
-        Ce = get_extraction_operator(intdata(igashell), local_id)
-
-        Xᵇ = IGA.compute_bezier_points(Ce, X)
-        
-        reinit!(cv_sr, Xᵇ)
-        
-        # Midcoord:
-        xᵐ = spatial_coordinate(cv_sr, 1, Xᵇ)
-
         stresses = igashell.stress_recovory.recovered_stresses[:, local_id]
         recovered_stresses[ic] = stresses
     end
