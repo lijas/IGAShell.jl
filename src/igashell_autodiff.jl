@@ -139,9 +139,6 @@ function calculate_stress_recovory_variables(ip, X::Vector{Vec{dim_s,T}}, h::T, 
     #FI = Tensor{2,dim_p,T}((α,β)-> g[α]⋅g[β])
     #FII = Tensor{2,dim_p,T}((α,β)-> g[α] ⋅ (∇g₃[β] ))
     κ = inv(FI)⋅FII
-
-    λ = [1+κ[i,i]*ξ[dim_s]*h/2 for i in 1:dim_p]
-    #λ = Vec{dim_p,T}(Tuple(λ))
     
-    return a, da, λ, κ
+    return a, da, κ
 end
