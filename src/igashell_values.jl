@@ -107,10 +107,13 @@ struct IGAShellValues{dim_s,dim_p,T<:Real,M,M2}
     Gᴵ ::Vector{  Triad{dim_s,T}   }  #iqp, dim
     Eₐ ::Vector{  Triad{dim_s,T}   }  #iqp, dim
     Dₐ ::Vector{  Triad{dim_s,T}   }  #iqp, dim x dim
-    κ  ::Vector{ Tensor{2,dim_p,T,M}}
-    κᵐ ::Vector{ Tensor{2,dim_p,T,M}}
-    R  ::Vector{  Tensor{2,dim_s,T,M2}}
-    
+    κ  ::Vector{ Tensor{1,dim_p,T,dim_p}} #Vector with principle curvature values
+    κᵐ ::Vector{ Tensor{1,dim_p,T,dim_p}} 
+    B  ::Vector{  Tensor{2,dim_p,T,M}} #Planar transformation matrix from principle curvatures from xi-eta-zeta system.
+    Bᵐ ::Vector{  Tensor{2,dim_p,T,M}} 
+    R  ::Vector{  Tensor{2,dim_s,T,M2}}  #Rotation matrix from global to stress coordinate system.
+    Rᴾ  ::Vector{  Tensor{2,dim_s,T,M2}} #Rotation matrix from global to principle curvature directions
+
     N::Matrix{  Vec{dim_s,T}  }
     dNdξ::Matrix{  Tensor{2,dim_s,T,M2}  }
     #d²Udξ²::Matrix{  Array{T,3}  } #Tensor{2,dim_s,T,M2}
@@ -130,6 +133,67 @@ struct IGAShellValues{dim_s,dim_p,T<:Real,M,M2}
     inp_ip::Interpolation
     oop_ip::Vector{Interpolation}
 end
+
+
+function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_ooplane::QuadratureRule{1}, mid_ip::Interpolation, sizehint::Int = 10, oop_ip::Vector{<:Interpolation}=Interpolation[]) where {dim_p,T}
+    
+    n_oop_qp = length(getweights(qr_ooplane))
+    n_inp_qp = length(getweights(qr_inplane))
+    nqp = n_inp_qp*n_oop_qp
+
+    n_midplane_basefuncs = getnbasefunctions(mid_ip)
+    dim_s = dim_p+1
+    @assert JuAFEM.getdim(mid_ip) == dim_p
+
+    # Function interpolation
+    inplane_values_bezier = BasisValues(qr_inplane, mid_ip)
+    
+    H = [BasisValues{1,T}() for _ in 1:n_midplane_basefuncs]
+
+    G  = [zero(Triad{dim_s,T}) for _ in 1:nqp]
+    Gᴵ = [zero(Triad{dim_s,T}) for _ in 1:nqp]
+    κ =  [zero(Tensor{1,dim_p,T}) for _ in 1:nqp]
+    κᵐ = [zero(Tensor{1,dim_p,T}) for _ in 1:n_inp_qp]
+    B = [zero(Tensor{2,dim_p,T}) for _ in 1:nqp]
+    Bᵐ = [zero(Tensor{2,dim_p,T}) for _ in 1:n_inp_qp]
+    Eₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
+    Dₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
+    R =  [zero(Tensor{2,dim_s,T}) for _ in 1:nqp]
+    Rᴾ =  [zero(Tensor{2,dim_s,T}) for _ in 1:nqp]
+
+    max_nbasefunctions = n_midplane_basefuncs*dim_s * sizehint #hardcoded
+    U = fill(zero(Tensor{1,dim_s,T}) * T(NaN), max_nbasefunctions, nqp)
+    dUdξ = fill(zero(Tensor{2,dim_s,T}) * T(NaN), max_nbasefunctions, nqp)
+    d²Udξ² = fill(zeros(dim_s,dim_s,dim_s) * T(NaN), max_nbasefunctions, nqp) 
+
+    detJdV = fill(T(NaN), nqp)
+    detJdA = fill(T(NaN), nqp)
+
+    MM1 = Tensors.n_components(Tensors.get_base(eltype(B)))
+    MM2 = Tensors.n_components(Tensors.get_base(eltype(dUdξ)))
+
+    #combine the two quadrature rules
+    points = Vec{dim_s,T}[]
+    weights = T[]
+    for oqp in 1:n_oop_qp
+        for iqp in 1:n_inp_qp
+            _p = [qr_inplane.points[iqp]..., qr_ooplane.points[oqp]...]
+            _w = qr_inplane.weights[iqp]*qr_ooplane.weights[oqp]
+            push!(points, Vec{dim_s,T}((_p...,)))
+            push!(weights, _w)
+        end
+    end
+    qr = QuadratureRule{dim_s,RefCube,T}(weights, points)
+
+    #Initalize bezier operator as NaN
+    bezier_operator = IGA.bezier_extraction_to_vector(sparse(Diagonal(fill(NaN, n_midplane_basefuncs))))
+
+    return IGAShellValues{dim_s,dim_p,T,MM1,MM2}(inplane_values_bezier, deepcopy(inplane_values_bezier), H, detJdV, detJdA,
+                                                G, Gᴵ, Eₐ, Dₐ, κ, κᵐ, B, Bᵐ, R, Rᴾ, U, dUdξ, 
+                                                Ref(max_nbasefunctions), Ref(bezier_operator), qr, 
+                                                deepcopy(qr_inplane), deepcopy(qr_ooplane), thickness, mid_ip, oop_ip)
+end
+
 
 getnquadpoints_ooplane(cv::IGAShellValues) = return length(cv.oqr.weights)
 getnquadpoints_inplane(cv::IGAShellValues) = return length(cv.iqr.weights)
@@ -352,11 +416,38 @@ function _reinit_layer!(cv::IGAShellValues{dim_s,dim_p,T}, qp_indx) where {dim_s
         end
     end
     
+    FI = Tensor{2,dim_s,T}((α,β)-> G[α]⋅G[β])
+    FII = Tensor{2,dim_s,T}((α,β)-> G[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
+    @show W = inv(FI)⋅FII
+    @show _κ, _P = eigen(W)
+
     FI = Tensor{2,dim_p,T}((α,β)-> G[α]⋅G[β])
     FII = Tensor{2,dim_p,T}((α,β)-> G[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
-    cv.κ[qp] = inv(FI)⋅FII
+    @show W = inv(FI)⋅FII
+    @show _κ, _P = eigen(W)
+    error("sdf")
+    _κ, _P = eigen(W)
 
+    cv.κ[qp] = Vec{dim_p,T}(Tuple(_κ))
+
+    eᵖ = zeros(Vec{dim_s,T}, dim_p)
+    for d in 1:dim_p
+        for α in 1:dim_p
+            eᵖ[d] += _P[α,d] * G[α]
+        end
+        eᵖ[d] /= norm(eᵖ[d])
+    end
+
+    #Planar rotation matrix
+    cv.B[qp] = Tensor{2,dim_p,T}((i,j) -> eᵖ[i] ⋅ G[j])
+
+    #Rotaiton matrix for stress-coordinate system
     cv.R[qp] = calculate_R(G...)
+
+    #Rotaiton matrix for curvature-coordinate system
+    _R = [eᵖ[1] eᵖ[2] D/norm(D)]
+    cv.Rᴾ[qp] = Tensor{2,dim_s,T}((i,j)->_R[i,j])
+
 end
 
 function calculate_R(g1::Vec{3,T},g2::Vec{3,T}, ::Vec{3,T}) where {T}
@@ -408,11 +499,27 @@ function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords
         cv.Dₐ[iqp][1] = 0.5cv.thickness * (da1*norm(a) - a*c1)/(a⋅a)
     end
 
-    FI = Tensor{2,dim_p,T}((α,β)-> Eₐ[α]⋅Eₐ[β])
-    FII = Tensor{2,dim_p,T}((α,β)-> Eₐ[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
-    cv.κᵐ[iqp] = inv(FI)⋅FII
+    FI = SymmetricTensor{2,dim_p,T}((α,β)-> Eₐ[α]⋅Eₐ[β])
+    FII = SymmetricTensor{2,dim_p,T}((α,β)-> Eₐ[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
+    W = inv(FI)⋅FII
 
+    _κ, _P = eigen(W)
+
+    eᵖ = zeros(Vec{dim_s,T}, dim_p)
+    for d in 1:dim_p
+        for α in 1:dim_p
+            eᵖ[d] += _P[α,d] * Eₐ[α]
+        end
+        eᵖ[d] /= norm(eᵖ[d])
+    end
+
+    #
+    cv.κᵐ[iqp] = Vec{dim_p,T}(Tuple(_κ))
+
+    #Planar rotation matrix
+    cv.Bᵐ[iqp] = Tensor{2,dim_p,T}((i,j) -> eᵖ[i] ⋅ Eₐ[j])
 end
+
 
 function JuAFEM.reinit!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
 
@@ -463,60 +570,6 @@ end
 get_qp_weight(cv::IGAShellValues, qp::Int) = cv.qr.weights[qp]
 get_oop_qp_weight(cv::IGAShellValues, oqp::Int) = cv.oqr.weights[oqp]
 get_iop_qp_weight(cv::IGAShellValues, iqp::Int) = cv.iqr.weights[iqp]
-
-function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_ooplane::QuadratureRule{1}, mid_ip::Interpolation, sizehint::Int = 10, oop_ip::Vector{<:Interpolation}=Interpolation[]) where {dim_p,T}
-    
-    n_oop_qp = length(getweights(qr_ooplane))
-    n_inp_qp = length(getweights(qr_inplane))
-    nqp = n_inp_qp*n_oop_qp
-
-    n_midplane_basefuncs = getnbasefunctions(mid_ip)
-    dim_s = dim_p+1
-    @assert JuAFEM.getdim(mid_ip) == dim_p
-
-    # Function interpolation
-    inplane_values_bezier = BasisValues(qr_inplane, mid_ip)
-    
-    H = [BasisValues{1,T}() for _ in 1:n_midplane_basefuncs]
-
-    G  = [zero(Triad{dim_s,T}) for _ in 1:nqp]
-    Gᴵ = [zero(Triad{dim_s,T}) for _ in 1:nqp]
-    R =  [zero(Tensor{2,dim_s,T}) for _ in 1:nqp]
-    κ =  [zero(Tensor{2,dim_p,T}) for _ in 1:nqp]
-    κᵐ = [zero(Tensor{2,dim_p,T}) for _ in 1:n_inp_qp]
-    Eₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
-    Dₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
-
-    max_nbasefunctions = n_midplane_basefuncs*dim_s * sizehint #hardcoded
-    U = fill(zero(Tensor{1,dim_s,T}) * T(NaN), max_nbasefunctions, nqp)
-    dUdξ = fill(zero(Tensor{2,dim_s,T}) * T(NaN), max_nbasefunctions, nqp)
-    d²Udξ² = fill(zeros(dim_s,dim_s,dim_s) * T(NaN), max_nbasefunctions, nqp) 
-
-    detJdV = fill(T(NaN), nqp)
-    detJdA = fill(T(NaN), nqp)
-
-    MM1 = Tensors.n_components(Tensors.get_base(eltype(κ)))
-    MM2 = Tensors.n_components(Tensors.get_base(eltype(dUdξ)))
-
-    #combine the two quadrature rules
-    points = Vec{dim_s,T}[]
-    weights = T[]
-    for oqp in 1:n_oop_qp
-        for iqp in 1:n_inp_qp
-            _p = [qr_inplane.points[iqp]..., qr_ooplane.points[oqp]...]
-            _w = qr_inplane.weights[iqp]*qr_ooplane.weights[oqp]
-            push!(points, Vec{dim_s,T}((_p...,)))
-            push!(weights, _w)
-        end
-    end
-    qr = QuadratureRule{dim_s,RefCube,T}(weights, points)
-
-    #Initalize bezier operator as NaN
-    bezier_operator = IGA.bezier_extraction_to_vector(sparse(Diagonal(fill(NaN, n_midplane_basefuncs))))
-
-    return IGAShellValues{dim_s,dim_p,T,MM1,MM2}(inplane_values_bezier, deepcopy(inplane_values_bezier), H, detJdV, detJdA, G, Gᴵ, Eₐ, Dₐ, κ, κᵐ, R, U, dUdξ, Ref(max_nbasefunctions), Ref(bezier_operator), qr, 
-                                                 deepcopy(qr_inplane), deepcopy(qr_ooplane), thickness, mid_ip, oop_ip)
-end
 
 function function_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{T}, Θ::Int, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}
     n_base_funcs = getnbasefunctions(cv)
