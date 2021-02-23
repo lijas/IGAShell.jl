@@ -2,17 +2,17 @@ using Five
 using IgAShell
 
 #Dimension
-const DIM = 2
-const NELX = 110
-const NELY = 1
+ DIM = 2
+ NELX = 110
+ NELY = 1
 
-const ORDERS = (2,2)
+ ORDERS = (2,2)
 
-const L = 110.0
-const h = 8.0
-const b = 20.0
-const au = 56.0
-const al = 32.0
+ L = 110.0
+ h = 8.0
+ b = 20.0
+ au = 56.0
+ al = 32.0
 
 angles = deg2rad.([0.0, 0.0, 0.0, 0.0])
 nlayers = length(angles)
@@ -143,15 +143,50 @@ etf = IGAShellExternalForce(
 )
 push!(data.external_forces, etf)
 
-#data.outputs["forcedofs2"] = IGAShell.IGAShellBCOutput(Ref(igashell), outputset = edgeset, components = [dim], interval = 0.00)
+output = OutputData(
+    type = IGAShellBCOutput(
+        igashell = igashell,
+        comps = [DIM]
+    ),
+    interval = 0.0,
+    set      = edgeset
+)
+data.outputdata["reactionforce"] = output
 
+
+vtkoutput = VTKCellOutput(
+    type = IGAShellConfigStateOutput()
+)
+Five.push_vtkoutput!(data.output[], vtkoutput)
+
+#
+vtkoutput = VTKNodeOutput(
+    type = MaterialStateOutput(
+        field = :interface_damage
+    ),
+)
+Five.push_vtkoutput!(data.output[], vtkoutput)
 
 #Stress output
-#=postcells = [50, 75, 90]
-stress_output = IGAShell.IGAShellStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
-data.outputs["Stress at 50%"] = stress_output
-stress_output = IGAShell.IGAShellRecovoredStressOutput(Ref(igashell), cellset = postcells, interval = 0.00)
-data.outputs["RS at 50%"] = stress_output=#
+#
+output = OutputData(
+    type = IGAShellStressOutput(
+        igashell = igashell,
+    ),
+    interval = 0.0,
+    set      = [25, 50, 75, 90]
+)
+data.outputdata["Stress at 50%"] = output
+
+#
+output = OutputData(
+    type = IGAShellRecovoredStressOutput(
+        igashell = igashell,
+    ),
+    interval = 0.0,
+    set      = [25, 50, 75, 90]
+)
+data.outputdata["RS at 50%"] = output
 
 #=solver = NewtonSolver(
     Δt0 = 0.1,
@@ -191,4 +226,5 @@ solver = LocalDissipationSolver(
 
 output = solvethis(solver, state, globaldata)
 
-
+d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(output.outputdata["reactionforce"].data)]
+f = [output.outputdata["reactionforce"].data[i].forces for i in 1:length(output.outputdata["reactionforce"].data)]

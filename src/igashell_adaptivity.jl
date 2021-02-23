@@ -112,8 +112,8 @@ function get_upgrade_operator(adap::IGAShellAdaptivity, from::CPSTATE, to::CPSTA
         return _get_upgrade_operator(adap.strongdiscont2fullydiscont, adap.order, adap.interface_knots, from, to)
     elseif (is_layered(from) || is_lumped(from)) && has_discontinuity(to)
         return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
-    # elseif is_discontiniuos(from) && is_discontiniuos(to)
-        # return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
+    elseif has_discontinuity(from) && has_discontinuity(to)
+        return create_upgrade_operator(adap.order, adap.interface_knots, from, to)
     else
         error("Wrong upgrade, $from -> $to")
     end

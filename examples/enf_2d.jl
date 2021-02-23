@@ -6,7 +6,7 @@ DIM = 2
 NELX = 175
 NELY = 1
 
-ORDERS = (2,2)
+ORDERS = (2,3)
 
 L = 120.0
 h = 4.0
@@ -75,7 +75,7 @@ IgAShell.IGAShellData(;
     initial_cellstates        = cellstates,
     initial_interface_damages = interface_damage,
     nqp_inplane_order         = 3,
-    nqp_ooplane_per_layer     = 2,
+    nqp_ooplane_per_layer     = 4,
     adaptable                 = true,
     small_deformations_theory = false,
     LIMIT_UPGRADE_INTERFACE   = 0.04,
@@ -161,7 +161,7 @@ output = OutputData(
         igashell = igashell,
     ),
     interval = 0.0,
-    set      = [50, 75]
+    set      = [90, 100, 107, 108, 109, 110, 111, 150]
 )
 data.outputdata["Stress at 50%"] = output
 
@@ -171,7 +171,7 @@ output = OutputData(
         igashell = igashell,
     ),
     interval = 0.0,
-    set      = [50, 75]
+    set      = [90, 100, 107, 108, 109, 110, 111, 150]
 )
 data.outputdata["RS at 50%"] = output
 
