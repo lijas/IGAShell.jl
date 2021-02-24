@@ -197,13 +197,8 @@ function vertex_converter(igashell::IGAShell{2,3}, v::Int)
 end
 
 function vertex_converter(igashell::IGAShell{1,2}, v::Int)
-    if v == 1
-        return 1
-    elseif v == Ferrite.nnodes_per_cell(igashell)
-        return 2
-    else
-        error("Bad vertex")
-    end
+    @assert(v <= 2)
+    return v
 end
 
 

@@ -96,7 +96,7 @@ function IGAShell(;
     adapdata = IGAShellAdaptivity(data, connectivity, ncells, ncontrol_points)
 
     #
-    Ce_mat, _ = IGA.compute_bezier_extraction_operators(data.orders[1:dim_p]..., data.knot_vectors[1:dim_p]...)
+    Ce_mat, _ = IGA.compute_bezier_extraction_operators(data.orders[1:dim_p], data.knot_vectors[1:dim_p])
     Ce_vec = IGA.bezier_extraction_to_vectors(Ce_mat)
     
     #vtkdata
