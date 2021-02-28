@@ -555,6 +555,10 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
 
     for (ic,cellid) in enumerate(igashell.cellset)#enumerate(CellIterator(dh, igashell.cellset))
         
+        if ic != 223
+            continue
+        end
+
         cellstate = getcellstate(adapdata(igashell), ic)
 
         if !is_lumped(cellstate) && !is_layered(cellstate)

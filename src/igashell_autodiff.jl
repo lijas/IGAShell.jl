@@ -15,6 +15,10 @@ function _calculate_E(msip::Interpolation, coords::Vector{Vec{dim_s,T2}}, ξ::Ve
     return gradient((ξ) -> _calculate_X₀(msip, coords, ξ), ξ)[:,α]
 end
 
+function _calculate_Eₐ(msip::Interpolation, coords::Vector{Vec{dim_s,T2}}, ξ::Vec{dim_s,T}, α::Int, β::Int)where {dim_s,T,T2}
+    return gradient((ξ) -> _calculate_E(msip, coords, ξ, α), ξ)[:,β]
+end
+
 function _calculate_D(msip::Interpolation, coords::Vector{Vec{dim_s,T2}}, h::T2, ξ::Vec{dim_s,T}) where {dim_s,T,T2}
     
     E = [gradient((ξ) -> _calculate_X₀(msip, coords, ξ), ξ)[:,d] for d in 1:(dim_s-1)]
@@ -141,4 +145,17 @@ function calculate_stress_recovory_variables(ip, X::Vector{Vec{dim_s,T}}, h::T, 
     κ = inv(FI)⋅FII
     
     return a, da, κ
+end
+
+
+function calculate_stress_recovory_variables2(ip, X::Vector{Vec{dim_s,T}}, h::T, ue::AbstractVector{T}, ξ::Vec{dim_s,T2}) where {dim_s, T,T2}
+
+    dim_p = dim_s-1
+
+    E = [ _calculate_E(ip, X, ξ, d) for d in 1:dim_p]
+    Eₐ = [ _calculate_Eₐ(ip, X, ξ, d1, d2) for d1 in 1:dim_p, d2 in 1:dim_p]
+    
+    Dₐ = [gradient((ξ)->_calculate_D(ip, X, h, ξ), ξ)[:,d] for d in 1:dim_p]
+    
+    return E, Eₐ#, κ
 end

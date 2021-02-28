@@ -416,16 +416,16 @@ function _reinit_layer!(cv::IGAShellValues{dim_s,dim_p,T}, qp_indx) where {dim_s
         end
     end
     
-    FI = Tensor{2,dim_s,T}((α,β)-> G[α]⋅G[β])
-    FII = Tensor{2,dim_s,T}((α,β)-> G[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
-    @show W = inv(FI)⋅FII
-    @show _κ, _P = eigen(W)
+    #FI = Tensor{2,dim_s,T}((α,β)-> G[α]⋅G[β])
+    #FII = Tensor{2,dim_s,T}((α,β)-> G[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
+    #@show W = inv(FI)⋅FII
+    #@show _κ, _P = eigen(W)
 
     FI = Tensor{2,dim_p,T}((α,β)-> G[α]⋅G[β])
     FII = Tensor{2,dim_p,T}((α,β)-> G[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
-    @show W = inv(FI)⋅FII
-    @show _κ, _P = eigen(W)
-    error("sdf")
+     W = inv(FI)⋅FII
+     _κ, _P = eigen(W)
+    #error("sdf")
     _κ, _P = eigen(W)
 
     cv.κ[qp] = Vec{dim_p,T}(Tuple(_κ))
@@ -503,6 +503,8 @@ function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords
     FII = SymmetricTensor{2,dim_p,T}((α,β)-> Eₐ[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
     W = inv(FI)⋅FII
 
+    isnan2(v::Vec{2, Float64}) = any(isnan.(v))
+    any(isnan.(W)) && @show W, Eₐ, cv.inplane_values_bezier.dNdξ, coords
     _κ, _P = eigen(W)
 
     eᵖ = zeros(Vec{dim_s,T}, dim_p)

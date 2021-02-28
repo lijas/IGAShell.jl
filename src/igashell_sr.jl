@@ -245,17 +245,40 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
 
             #
             Rᴾ = cv_sr.Rᴾ[lqp]
-            @show Rᴾ
-            σᴾ[i] = Rᴾ' ⋅ _σ ⋅ Rᴾ
+            celldata.cellid==223 && @show Rᴾ
+            σᴾ[i] = symmetric(Rᴾ' ⋅ _σ ⋅ Rᴾ)
         end
 
+        ep = [cv_sr.Rᴾ[lqp][:,i] for i in 1:dim_s]
         xᴸ = Xᴸ + uᴸ 
 
-        _a, _da, _ = calculate_stress_recovory_variables(ipᴸ, Xᴸ, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
+        E, Eₐ = calculate_stress_recovory_variables2(ipᴸ, Xᴸ, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
+        
+        @show celldata.cellid
+        B = Tensor{2,2}((i,j) -> ep[i] ⋅ E[j])
+        Ep = inv(B') * E
+        @show E
+        @show Ep
+        error("sdf")
+        _g = inv(B')*_g
+        
+        _a = [_g[i]⋅_g[j] for i in 1:2, j in 1:2]
+        
+        for α in 1:2
+            for i in 1:2
+                dgdθ[α,β] += d2E[β][i] * B[i][α]
+            end
+            _da[α,β] = 1/_a[α] * (_g[α] * dgdθ[α,β]) 
+        end
+
+        for i in 1:2
+            _da = _da
+        end
+
         a, da, κ = _store_as_tensors(_a, _da, cv_sr.κᵐ[1])
-        
         λ = Vec{2,T}((i)-> 1 + ζ * κ[i])
-        
+
+
         if celldata.cellid == 113
             FI = Tensor{2,dim_p,T}((α,β)-> cv_sr.Eₐ[1][α]⋅cv_sr.Eₐ[1][β])
             FII = Tensor{2,dim_p,T}((α,β)-> cv_sr.Eₐ[1][α] ⋅ (cv_sr.Dₐ[1][β] * 2/cv_sr.thickness))
@@ -477,4 +500,45 @@ function _store_as_tensors(∇σ::Vector, ∇∇σ::Matrix)
     end
 
     return ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ
+end
+
+function _compute_mass_matrix()
+
+    f = zeros(T, getnbasefunctions_inplane(cv), 9)
+    for qp in 1:getnquadpoints(cv)
+        dΩ = getdetJdV(fe_values, q_point)
+        for i in 1:getnbasefunctions_inplane(cv)
+            Ni = shape_value(cv, qp, i)
+            for j in 1:getnbasefunctions_inplane(cv)
+                Nj = shape_value(cv, qp, j)
+           
+                M[i,j] += (Ni ⋅ Nj) * dΩ
+            end
+        end
+    end
+
+    return M
+end
+
+function compute_stresses_at_cp(M, stresses::SymmetricTensor{2,3}, cv)
+
+    f = zeros(T, getnbasefunctions_inplane(cv), 9)
+    for qp in 1:getnquadpoints(cv)
+        dΩ = getdetJdV(fe_values, qp)
+        qp_stress = stresses[q_point]
+        for i in 1:getnbasefunctions_inplane(cv)
+            v = shape_value(fe_values, q_point, i)
+            fe[i, :] += v * [qp_stress.data[i] for i=1:6] * dΩ
+        end
+    end
+
+    _stresses_cp = M\f
+
+    stresses_cp = similar(stresses, getnbasefunctions_inplane(cv))
+    for i in 1:getnbasefunctions_inplane(cv)
+        data = Tuple(_stresses_cp[i,:])
+        stresses_cp[i] = SymmetricTensor{2,3}(data)
+    end
+
+    return stresses_cp
 end
