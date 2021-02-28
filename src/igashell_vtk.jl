@@ -139,8 +139,8 @@ function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGA
     cls = MeshCell[]
     node_offset = 0
     nodes = zeros(Int, JuAFEM.nnodes_per_cell(igashell))
-    coords = zeros(Vec{dim_s,T}, JuAFEM.nnodes_per_cell(igashell))
-    bezier_coords = similar(coords)
+    X = zeros(Vec{dim_s,T}, JuAFEM.nnodes_per_cell(igashell))
+    Xᵇ = similar(X)
     cv_plot = vtkdata(igashell).cell_values_plot
     node_disps = Vec{dim_s,T}[]
     celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh,1))
@@ -148,8 +148,11 @@ function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGA
         
         Ce = get_extraction_operator(intdata(igashell), ic)
         
+        JuAFEM.cellcoords!(X, dh, cellid)
+        Xᵇ .= IGA.compute_bezier_points(Ce, X)
+
         IGA.set_bezier_operator!(cv_plot, Ce)
-        reinit!(cv_plot, bezier_coords)
+        reinit!(cv_plot, Xᵇ)
 
         #Get displacement for this cell
         ndofs = JuAFEM.ndofs_per_cell(dh,cellid)
