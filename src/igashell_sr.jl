@@ -240,72 +240,38 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
 
             _σ = symmetric(σ_states[range[i]])
             #Rotate back to global
-            # R = cv_sr.R[lqp]
-            # σᴾ = R ⋅ σ_states[range[i]] ⋅ R'
+            R = cv_sr.R[lqp]
+            __σ = R ⋅ symmetric(σ_states[range[i]] ⋅ R')
 
             #
             Rᴾ = cv_sr.Rᴾ[lqp]
-            celldata.cellid==223 && @show Rᴾ
-            σᴾ[i] = symmetric(Rᴾ' ⋅ _σ ⋅ Rᴾ)
+            σᴾ[i] = symmetric(Rᴾ' ⋅ __σ ⋅ Rᴾ)
         end
 
         ep = [cv_sr.Rᴾ[lqp][:,i] for i in 1:dim_s]
         xᴸ = Xᴸ + uᴸ 
 
-        E, Eₐ = calculate_stress_recovory_variables2(ipᴸ, Xᴸ, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
+        _a, _da, B = calculate_stress_recovory_variables2(ipᴸ, Xᴸ, h, reinterpret(T,uᴸ), ep, Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
         
-        @show celldata.cellid
-        B = Tensor{2,2}((i,j) -> ep[i] ⋅ E[j])
-        Ep = inv(B') * E
-        @show E
-        @show Ep
-        error("sdf")
-        _g = inv(B')*_g
-        
-        _a = [_g[i]⋅_g[j] for i in 1:2, j in 1:2]
-        
-        for α in 1:2
-            for i in 1:2
-                dgdθ[α,β] += d2E[β][i] * B[i][α]
-            end
-            _da[α,β] = 1/_a[α] * (_g[α] * dgdθ[α,β]) 
-        end
+        #=@show cv_sr.R[lqp]
+        @show cv_sr.Rᴾ[lqp]
+        @show cv_sr.κᵐ[1]
+        @show _a
+        @show _da
+        @show B=#
 
-        for i in 1:2
-            _da = _da
-        end
 
         a, da, κ = _store_as_tensors(_a, _da, cv_sr.κᵐ[1])
         λ = Vec{2,T}((i)-> 1 + ζ * κ[i])
 
-
-        if celldata.cellid == 113
-            FI = Tensor{2,dim_p,T}((α,β)-> cv_sr.Eₐ[1][α]⋅cv_sr.Eₐ[1][β])
-            FII = Tensor{2,dim_p,T}((α,β)-> cv_sr.Eₐ[1][α] ⋅ (cv_sr.Dₐ[1][β] * 2/cv_sr.thickness))
-            
-            a1 = sqrt(cv_sr.Eₐ[1][1] ⋅ cv_sr.Eₐ[1][1])
-
-            _E1  = inv(cv_sr.Bᵐ[1]') ⋅ cv_sr.Eₐ[1][1]
-            a12 = sqrt(_E1 ⋅ _E1)
-
-
-            @show cv_sr.Rᵖ[lqp]
-            @show cv_sr.R[lqp]
-            @show a1
-            @show a12 
-            @show cv_sr.Eₐ[lqp][1]
-            @show cv_sr.Eₐ[lqp][2]
-            @show cv_sr.Eₐ[lqp][3]
-            @show cv_sr.κᵐ[lqp]
-            @show cv_sr.Bᵐ[lqp]
-
-            error("sdf")
-        end
-
         #Calculate and extract gradients for stress recovory equations
         σ = function_value(cvᴸ, 1, σ_states, range)
-        ∇σ = JuAFEM.function_derivative(cvᴸ, 1, σᴾ, 1:length(range))
-        ∇∇σ = function_second_derivative(cvᴸ, 1, σᴾ, 1:length(range))
+        _∇σ = JuAFEM.function_derivative(cvᴸ, 1, σᴾ, 1:length(range))
+        _∇∇σ = function_second_derivative(cvᴸ, 1, σᴾ, 1:length(range))
+        
+        ∇σ = inv(B') * _∇σ
+        ∇∇σ = _∇∇σ*0.0
+        @show ∇σ
         ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(∇σ, ∇∇σ)
         
         integration_values[lqp+1,ilay] = StressRecovoryIntegrationValues(σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, κ, a, da, λ, ζ)
@@ -357,7 +323,7 @@ function calculate_stress_recovory_integrals_for_layer!(srdata::IGAShellStressRe
                 λ₁*λ₁/a₂ * ∇₂σ₁₂ +
                 λ₁*λ₁*∂₁a₂/a₁/a₂ * (σ₁₁ - σ₂₂) + 
                2λ₁*λ₂*∂₂a₁/a₁/a₂ * σ₁₂) * dZ
-
+        
         σᶻʸ = (λ₁*λ₂/a₂ * ∇₂σ₂₂ +
                 λ₂*λ₂/a₁ * ∇₁σ₁₂ +
                 λ₂*λ₂*∂₂a₁/a₁/a₂ * (σ₂₂ - σ₁₁) + 
@@ -463,6 +429,7 @@ function calculate_recovered_stresses!(srdata::IGAShellStressRecovory{dim_s,dim_
             σᶻʸ = -(∑∫σᶻʸ + Cᶻʸ)/(λ₁*λ₂*λ₂) 
             σᶻᶻ = -(∑∫σᶻᶻ + ζ*C₂ᶻ + C₁ᶻ)/(λ₁*λ₂)
             
+            @show σᶻˣ, ic
             srdata.recovered_stresses[i+1,ic] = RecoveredStresses(σᶻˣ, σᶻʸ, σᶻᶻ, ζ)
             i+=1
         end
@@ -470,7 +437,7 @@ function calculate_recovered_stresses!(srdata::IGAShellStressRecovory{dim_s,dim_
 end
 
 
-function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{2,T}}, _κ::Tensor{1,1}) where {T}
+function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{2,T}}, _κ::Vec{1}) where {T}
     
     a = Vec{2,T}((_a[1], 1.0))
     da = Tensor{2,2}((_da[1][1], _da[1][2], 0.0, 0.0))
@@ -480,7 +447,7 @@ function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{2,T}}, _κ::Tensor{1,1
     return a, da, κ
 end
 
-function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{3,T}}, _κ::Tensor{1,2}) where {T}
+function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{3,T}}, _κ::Vec{2}) where {T}
     a = Tensor{1,2,T}(Tuple(_a))
     da = Tensor{2,2,T}((_da[1][1], _da[1][2], _da[2][1], _da[2][2]))
 

@@ -148,14 +148,37 @@ function calculate_stress_recovory_variables(ip, X::Vector{Vec{dim_s,T}}, h::T, 
 end
 
 
-function calculate_stress_recovory_variables2(ip, X::Vector{Vec{dim_s,T}}, h::T, ue::AbstractVector{T}, ξ::Vec{dim_s,T2}) where {dim_s, T,T2}
+function calculate_stress_recovory_variables2(ip, X::Vector{Vec{dim_s,T}}, h::T, ue::AbstractVector{T}, ep::Vector{Vec{dim_s,T}}, ξ::Vec{dim_s,T2}) where {dim_s, T,T2}
 
     dim_p = dim_s-1
 
     E = [ _calculate_E(ip, X, ξ, d) for d in 1:dim_p]
     Eₐ = [ _calculate_Eₐ(ip, X, ξ, d1, d2) for d1 in 1:dim_p, d2 in 1:dim_p]
+
+    da2 = [gradient((ξ)->calculate_a(ip, X, h, ue, ξ, i), ξ) for i in 1:dim_p]
+
+    B = Tensor{2,2}((i,j) -> ep[i] ⋅ E[j])
+    b = inv(B)
+
+    _E = inv(B') * E  
     
-    Dₐ = [gradient((ξ)->_calculate_D(ip, X, h, ξ), ξ)[:,d] for d in 1:dim_p]
-    
-    return E, Eₐ#, κ
+    _a = [_E[i] ⋅ _E[i] for i in 1:2]
+
+    da = zeros(T,2,2)
+    dgdθ = zeros(Vec{3,T}, 2, 2)
+    for α in 1:2, β = 1:2
+        for i in 1:2
+            dgdθ[α,β] += Eₐ[β,i] * b[i,α]
+        end
+    end
+
+    for α in 1:2, β = 1:2
+        da[α,β] = 1/_a[α] * (E[α] ⋅ dgdθ[α,β]) 
+    end
+
+    _da = inv(B') * da  
+
+    _da = [Vec{dim_s,T}((_da[:,1]..., 0.0)), Vec{dim_s,T}((_da[:,2]..., 0.0))]
+    return _a, _da, B
 end
+

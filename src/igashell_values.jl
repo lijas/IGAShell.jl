@@ -503,8 +503,6 @@ function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords
     FII = SymmetricTensor{2,dim_p,T}((α,β)-> Eₐ[α] ⋅ (cv.Dₐ[iqp][β] * 2/cv.thickness))
     W = inv(FI)⋅FII
 
-    isnan2(v::Vec{2, Float64}) = any(isnan.(v))
-    any(isnan.(W)) && @show W, Eₐ, cv.inplane_values_bezier.dNdξ, coords
     _κ, _P = eigen(W)
 
     eᵖ = zeros(Vec{dim_s,T}, dim_p)
