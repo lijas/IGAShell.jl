@@ -247,12 +247,13 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
             Rᴾ = cv_sr.Rᴾ[lqp]
             σᴾ[i] = symmetric(Rᴾ' ⋅ __σ ⋅ Rᴾ)
         end
+        @show cv_sr.Rᴾ[lqp]' ⋅ cv_sr.R[lqp]
 
         ep = [cv_sr.Rᴾ[lqp][:,i] for i in 1:dim_s]
         xᴸ = Xᴸ + uᴸ 
 
         _a, _da, B = calculate_stress_recovory_variables2(ipᴸ, Xᴸ, h, reinterpret(T,uᴸ), ep, Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
-        
+        @show _a
         #=@show cv_sr.R[lqp]
         @show cv_sr.Rᴾ[lqp]
         @show cv_sr.κᵐ[1]
@@ -271,7 +272,7 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
         
         ∇σ = inv(B') * _∇σ
         ∇∇σ = _∇∇σ*0.0
-        @show ∇σ
+        
         ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(∇σ, ∇∇σ)
         
         integration_values[lqp+1,ilay] = StressRecovoryIntegrationValues(σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, κ, a, da, λ, ζ)
@@ -429,7 +430,6 @@ function calculate_recovered_stresses!(srdata::IGAShellStressRecovory{dim_s,dim_
             σᶻʸ = -(∑∫σᶻʸ + Cᶻʸ)/(λ₁*λ₂*λ₂) 
             σᶻᶻ = -(∑∫σᶻᶻ + ζ*C₂ᶻ + C₁ᶻ)/(λ₁*λ₂)
             
-            @show σᶻˣ, ic
             srdata.recovered_stresses[i+1,ic] = RecoveredStresses(σᶻˣ, σᶻʸ, σᶻᶻ, ζ)
             i+=1
         end
