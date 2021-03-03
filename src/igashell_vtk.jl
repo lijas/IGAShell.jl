@@ -237,7 +237,7 @@ end
 
 Gets the interface damage at the nodes by taking the mean of the damage at all quadpoints.
 """
-function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNodeOutput{<:Five.MaterialStateOutput}, state::StateVariables, globaldata) where {dim_p,dim_s,T}
+function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNodeOutput{<:IGAShellMaterialStateOutput}, state::StateVariables, globaldata) where {dim_p,dim_s,T}
 
     n_vtknodes_per_layer = prod(vtkdata(igashell).n_plot_points_dim)::Int
     n_vtknodes_per_cell = n_vtknodes_per_layer * nlayers(igashell)
@@ -257,7 +257,7 @@ function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNod
 
         for ilay in 1:ninterfaces(igashell)
             interfacestates = state.partstates[ic].interfacestates[:,ilay]
-            mean_damage = mean(interface_damage.(interfacestates))
+            mean_damage = mean(interface_damage.(interfacestates, output.type.dir))
             
             layer_offset =  (ilay-1)*n_vtknodes_per_layer  +  n_vtknodes_inplane*(n_vtknodes_oop_per_layer-1)
 

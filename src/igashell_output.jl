@@ -1,5 +1,5 @@
-export IGAShellConfigStateOutput, IGAShellStressOutput, IGAShellBCOutput, IGAShellRecovoredStressOutput
-
+export IGAShellStressOutput, IGAShellBCOutput, IGAShellRecovoredStressOutput
+export IGAShellMaterialStateOutput, IGAShellConfigStateOutput
 """
 IGAShellStressOutput
     Output of stresses at specific elements
@@ -261,4 +261,9 @@ IGAShellConfigStateOutput
 """
 
 struct IGAShellConfigStateOutput <: Five.AbstractOutput end
+
+@Base.kwdef struct IGAShellMaterialStateOutput <: Five.AbstractOutput 
+    field::Symbol
+    dir::Int = 1
+end
 
