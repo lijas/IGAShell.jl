@@ -387,14 +387,26 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
             ⁿstates =  @view ⁿmaterialstates[:, ilay]
             states = @view materialstates[:, ilay]
 
-            if assemtype == IGASHELL_STIFFMAT || assemtype == IGASHELL_FSTAR
+            if assemtype == IGASHELL_STIFFMAT
                 @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
                                                     cv, 
                                                     ke, fe, 
-                                                    getmaterial(layerdata(igashell)), states, ⁿstates, 
+                                                    getmaterial(layerdata(igashell)), states, 
                                                     ue_layer, ilay, nlayers(igashell), active_dofs, 
-                                                    is_small_deformation_theory(layerdata(igashell)), getwidth(layerdata(igashell)))
-            
+                                                    is_small_deformation_theory(layerdata(igashell)), IGASHELL_STIFFMAT, getwidth(layerdata(igashell)))
+                
+                assemble!(assembler, celldofs[active_dofs], ke, fe)
+            elseif assemtype == IGASHELL_FSTAR
+
+                @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
+                                        cv, 
+                                        ke, fe, 
+                                        getmaterial(layerdata(igashell)), states, 
+                                        ue_layer, ilay, nlayers(igashell), active_dofs, 
+                                        is_small_deformation_theory(layerdata(igashell)), IGASHELL_FSTAR, getwidth(layerdata(igashell)))
+
+                state.system_arrays.fᴬ[celldofs[active_dofs]] += fe
+
             elseif assemtype == IGASHELL_DISSIPATION
                 
             else
@@ -409,7 +421,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                 
             fe , ke = numdiff(F!, ue_layer, ⁿstates, states)=#
 
-            assemble!(assembler, celldofs[active_dofs], ke, fe)
         end
     end
     
@@ -429,7 +440,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
 
         active_interface_dofs = build_active_interface_dofs(igashell, cellstate)
 
-        ⁿinterfacestates = state.prev_partstates[ic].interfacestates
         interfacestates = state.partstates[ic].interfacestates
 
         ndofs = JuAFEM.ndofs_per_cell(dh,cellid)
@@ -450,7 +460,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                 continue
             end
             
-            ⁿstates =  @view ⁿinterfacestates[:, iint]
             states = @view interfacestates[:, iint]
 
             Δue = state.Δd[celldofs]
@@ -473,7 +482,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
             @timeit "integrate_cohesive" A += integrate_cohesive_forcevector_and_stiffnessmatrix!(
                                                         cv_cohesive_top, cv_cohesive_bot,
                                                         interface_material(igashell), viscocity_parameter(layerdata(igashell)), 
-                                                        ⁿstates, states,
+                                                        states,
                                                         ike, ife,                
                                                         ue_interface, 
                                                         Δue_interface, 
@@ -482,23 +491,26 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                                                         active_dofs, getwidth(layerdata(igashell))) 
                 assemble!(assembler, celldofs[active_dofs], ike, ife)
             elseif assemtype == IGASHELL_FSTAR
+                ⁿinterfacestates = state.prev_partstates[ic].interfacestates
+                ⁿstates =  @view ⁿinterfacestates[:, iint]
+
                 @timeit "integrate_cohesive_fstar" integrate_cohesive_fstar!(
                                                             cv_cohesive_top, cv_cohesive_bot,
                                                             interface_material(igashell), viscocity_parameter(layerdata(igashell)), 
-                                                            ⁿstates, states,
+                                                            ⁿstates,
                                                             ike, ife,                
                                                             ue_interface, 
                                                             Δue_interface, 
                                                             Δt,
                                                             iint, ninterfaces(igashell),
                                                             active_dofs, getwidth(layerdata(igashell))) 
-                    state.system_arryas.fⁱ[celldofs[active_dofs]] += ife
+                    state.system_arrays.fᴬ[celldofs[active_dofs]] += ife
             elseif assemtype == IGASHELL_DISSIPATION
                 ge = Base.RefValue(zero(T))
                 @timeit "integrate_cohesive_dissi" integrate_dissipation!(
                                                             cv_cohesive_top, cv_cohesive_bot,
                                                             interface_material(igashell), viscocity_parameter(layerdata(igashell)), 
-                                                            ⁿstates, states,
+                                                            states,
                                                             ge, ife,                
                                                             ue_interface, 
                                                             Δue_interface, 
@@ -588,9 +600,9 @@ end
 function _get_layer_forcevector_and_stiffnessmatrix!(
                                 cv::IGAShellValues{dim_s,dim_p,T}, 
                                 ke::AbstractMatrix, fe::AbstractVector,
-                                material, materialstate, ⁿmaterialstate, 
+                                material, materialstate, 
                                 ue_layer::AbstractVector{T}, ilay::Int, nlayers::Int, active_dofs::Vector{Int}, 
-                                is_small_deformation_theory::Bool, width::T) where {dim_s,dim_p,T}
+                                is_small_deformation_theory::Bool, calculate_what::IGASHELL_ASSEMBLETYPE, width::T) where {dim_s,dim_p,T}
                                 
     ndofs_layer = length(active_dofs)
 
@@ -632,25 +644,35 @@ function _get_layer_forcevector_and_stiffnessmatrix!(
                 δF[i] = _δF
             end
             
-            if is_small_deformation_theory
-                _calculate_linear_forces!(fe, ke, cv, 
+            if calculate_what === IGASHELL_STIFFMAT
+                if is_small_deformation_theory
+                    _calculate_linear_forces!(fe, ke, cv, 
+                                                ilay, qpᴸ, qp, width,
+                                                F, R, δF, δɛ,
+                                                material, materialstate, 
+                                                ndofs_layer)
+                else
+                    _calculate_nonlinear_forces!(fe, ke, cv, 
+                                                ilay, qpᴸ, qp, width,
+                                                F, R, δF, δɛ,
+                                                material, materialstate, 
+                                                ndofs_layer)
+                end
+            elseif calculate_what === IGASHELL_FSTAR
+                _calculate_fstar!(fe, ke, cv, 
                                             ilay, qpᴸ, qp, width,
                                             F, R, δF, δɛ,
-                                            material, materialstate, ⁿmaterialstate, 
+                                            material, materialstate, 
                                             ndofs_layer)
             else
-                _calculate_nonlinear_forces!(fe, ke, cv, 
-                                            ilay, qpᴸ, qp, width,
-                                            F, R, δF, δɛ,
-                                            material, materialstate, ⁿmaterialstate, 
-                                            ndofs_layer)
+                error("Nothing to caluclate")
             end
         end
     end 
 
 end
 
-@inline function _calculate_linear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F::Tensor{2,dim_s}, R, δF, δɛ, material, materialstates, ⁿmaterialstates, ndofs_layer) where {dim_s}
+function _calculate_linear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F::Tensor{2,dim_s}, R, δF, δɛ, material, materialstates, ndofs_layer) where {dim_s}
     ɛ = symmetric(F) - one(SymmetricTensor{2,dim_s})
     
     δɛ .= symmetric.(δF)
@@ -658,7 +680,7 @@ end
 
     #Rotate strain
      _̂ε = symmetric(R' ⋅ ɛ ⋅ R)
-     _̂σ, ∂̂σ∂ɛ, new_matstate = Five.constitutive_driver(material[ilay], _̂ε, ⁿmaterialstates[layer_qp])
+     _̂σ, ∂̂σ∂ɛ, new_matstate = Five.constitutive_driver(material[ilay], _̂ε, materialstates[layer_qp])
     materialstates[layer_qp] = new_matstate
     ∂σ∂ɛ = otimesu(R,R) ⊡ ∂̂σ∂ɛ ⊡ otimesu(R',R')
     σ = R⋅_̂σ⋅R'
@@ -685,13 +707,13 @@ end
 
 end
 
-@inline function _calculate_nonlinear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F, R, δF, δE, material, materialstates, ⁿmaterialstates, ndofs_layer)
+function _calculate_nonlinear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F, R, δF, δE, material, materialstates, ndofs_layer)
     dΩ = getdetJdV(cv,qp)*width
 
     E = symmetric(1/2 * (F' ⋅ F - one(F)))
     #Ê = symmetric(R' ⋅ E ⋅ R)
 
-    S, ∂S∂E, new_matstate = Five.constitutive_driver(material[ilay], E, ⁿmaterialstates[layer_qp])
+    S, ∂S∂E, new_matstate = Five.constitutive_driver(material[ilay], E, materialstates[layer_qp])
     materialstates[layer_qp] = new_matstate
 
     σ = inv(det(F)) * F ⋅ S ⋅ F'
@@ -716,11 +738,30 @@ end
 
 end
 
+function _calculate_fstar!(fe, ke, cv, ilay, layer_qp, qp, width, F, R, δF, δE, material, materialstates, ndofs_layer)
+    dΩ = getdetJdV(cv,qp)*width
+
+    E = symmetric(1/2 * (F' ⋅ F - one(F)))
+
+    S, ∂S∂E, new_matstate = Five.constitutive_driver(material[ilay], E, materialstates[layer_qp])
+
+    # Hoist computations of δE
+    for i in 1:ndofs_layer
+        δFi = δF[i]
+        δE[i] = symmetric(1/2*(δFi'⋅F + F'⋅δFi))
+    end
+
+    for i in 1:ndofs_layer
+        δFi = δF[i]
+        fe[i] += (δE[i] ⊡ S) * dΩ
+    end
+
+end
+
 function integrate_cohesive_forcevector_and_stiffnessmatrix!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
     material::Five.AbstractMaterial, ξ::T,
     materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
-    new_materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ke::AbstractMatrix, 
     fe::AbstractVector, 
     ue::AbstractVector,
@@ -756,8 +797,8 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
         Ĵ = R'⋅J
         
         #constitutive_driver
-        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, new_materialstate[qp-qp_offset])
-        new_materialstate[qp-qp_offset] = new_matstate
+        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
+        materialstate[qp-qp_offset] = new_matstate
 
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
@@ -793,7 +834,6 @@ function integrate_cohesive_fstar!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
     material::Five.AbstractMaterial, ξ::T,
     materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
-    new_materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ke::AbstractMatrix, 
     fe::AbstractVector, 
     ue::AbstractVector,
@@ -813,21 +853,16 @@ function integrate_cohesive_fstar!(
         dΓ *= width
         
         u₊ = zero(Vec{dim_s,T}); u₋ = zero(Vec{dim_s,T}) 
-        Δu₊ = zero(Vec{dim_s,T}); Δu₋ = zero(Vec{dim_s,T}) 
         for (i,j) in enumerate(active_dofs)
-            u₊ += cv_top.U[j,qp] * ue[i]
-            u₋ += cv_bot.U[j,qp] * ue[i]
-
-            Δu₊ += cv_top.U[j,qp] * Δue[i]
-            Δu₋ += cv_bot.U[j,qp] * Δue[i]
+            u₊ += cv_top.N[j,qp] * ue[i]
+            u₋ += cv_bot.N[j,qp] * ue[i]
         end
 
-        ΔJ = Δu₊ - Δu₋
         J = u₊ - u₋
         Ĵ = R'⋅J
         
         #constitutive_driver
-        t̂, ∂t∂Ĵ, new_matstate = constitutive_driver(material, Ĵ, new_materialstate[qp-qp_offset])
+        t̂, ∂t∂Ĵ, new_matstate = Five.constitutive_driver(material, Ĵ, materialstate[qp-qp_offset])
 
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
@@ -857,7 +892,6 @@ function integrate_dissipation!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
     material::Five.AbstractMaterial, ξ::T,
     materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
-    new_materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ge::Base.RefValue, 
     fe::AbstractVector, 
     ue::AbstractVector,
@@ -888,7 +922,7 @@ function integrate_dissipation!(
 
         # The constitutive_driver calucaleted the dissipation and dgdJ in the internal force integration loop
         # and stored it in the state variable...
-        g, dgdĴ = Five.constitutive_driver_dissipation(material, Ĵ, new_materialstate[qp-qp_offset])
+        g, dgdĴ = Five.constitutive_driver_dissipation(material, Ĵ, materialstate[qp-qp_offset])
         dgdJ =  R ⋅ dgdĴ
 
         ge[] += g * dΓ
