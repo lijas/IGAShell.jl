@@ -240,20 +240,23 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
 
             _σ = symmetric(σ_states[range[i]])
             #Rotate back to global
-            R = cv_sr.R[lqp]
-            __σ = R ⋅ symmetric(σ_states[range[i]] ⋅ R')
+            R = cv.R[range[i]]
+            __σ = R ⋅ symmetric(σ_states[range[i]]) ⋅ R'
 
             #
-            Rᴾ = cv_sr.Rᴾ[lqp]
+            Rᴾ = cv.Rᴾ[range[i]]
             σᴾ[i] = symmetric(Rᴾ' ⋅ __σ ⋅ Rᴾ)
+            #@show i
+            #@show σᴾ[i]
+            #@show _σ
+            #@show cv.Rᴾ[range[i]]' ⋅ cv.R[range[i]]
         end
-        @show cv_sr.Rᴾ[lqp]' ⋅ cv_sr.R[lqp]
 
         ep = [cv_sr.Rᴾ[lqp][:,i] for i in 1:dim_s]
         xᴸ = Xᴸ + uᴸ 
 
         _a, _da, B = calculate_stress_recovory_variables2(ipᴸ, Xᴸ, h, reinterpret(T,uᴸ), ep, Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
-        @show _a
+        #@show _a
         #=@show cv_sr.R[lqp]
         @show cv_sr.Rᴾ[lqp]
         @show cv_sr.κᵐ[1]
