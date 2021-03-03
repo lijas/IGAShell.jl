@@ -3,12 +3,12 @@ using IgAShell
 
 #Dimension
  DIM = 2
- NELX = 110
+ NELX = 115
  NELY = 1
 
  ORDERS = (2,2)
 
- L = 110.0
+ L = 115.0
  h = 8.0
  b = 20.0
  au = 56.0
@@ -25,12 +25,19 @@ data = ProblemData(
 )
 
 #interfacematerial = IGAShell.MatCohesive{dim}(λ_0,λ_f,τ,K)
-interfacematerial = MatCZBilinear(
+#=interfacematerial = MatCZBilinear(
     K    = 1.0e4,
     Gᴵ   = (1050/1000, 1050/1000, 211.0/1000 ),
     τᴹᵃˣ = 0.5.*(90.0, 90.0, 60.0),
     η    = 1.6
-) 
+) =#
+
+interfacematerial = Five.MatVanDenBosch{2}(
+    σₘₐₓ = 60 * 0.5,
+    τₘₐₓ = 90 * 0.5,
+    Φₙ = 211.0/1000,
+    Φₜ = 1050.0/1000
+)
 
 material(_α) = 
 MatTransvLinearElastic(
@@ -68,9 +75,10 @@ addvertexset!(data.grid, "zfixed", (x)-> x[1] ≈ 9.5)
 #@show length(getvertexset(grid, "zfixed"))
 
 cellstates = [IgAShell.LAYERED for i in 1:NELX]
-cellstates[precracked_u] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
-cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3))
+#cellstates[precracked_u] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
+#cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3))
 cellstates = [IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3)) for i in 1:NELX]
+cellstates[1:10] .= IgAShell.LAYERED
 
 interface_damage = zeros(ninterfaces, NELX)
 interface_damage[1, precracked_l] .= 1.0
@@ -106,7 +114,7 @@ push!(data.parts, igashell)
 
 #
 data.output[] = Output(
-    interval = 5.0,
+    interval = 0.0,
     runname = "mels_2d",
     savepath = "./"
 )
@@ -114,8 +122,18 @@ data.output[] = Output(
 #
 etf = IGAShellWeakBC( 
     set = getvertexset(data.grid, "left"), 
-    func = (x,t) -> zeros(DIM), 
-    comps = 1:DIM,
+    func = (x,t) -> [0.0], 
+    comps = [2],
+    igashell = igashell, 
+    penalty = 1e7
+)
+push!(data.constraints, etf)
+
+edgeset_top_right = VertexInterfaceIndex(getvertexset(data.grid, "right"), 2)
+etf = IGAShellWeakBC( 
+    set = edgeset_top_right, 
+    func = (x,t) -> [0.0], 
+    comps = [1],
     igashell = igashell, 
     penalty = 1e7
 )
@@ -128,16 +146,16 @@ z_fixed_edgeset = VertexInterfaceIndex(zfixedcell..., 1)
 etf = IGAShellWeakBC( 
     set = [z_fixed_edgeset], 
     func = (x,t) -> [0.0], 
-    comps = [DIM],
+    comps = [2],
     igashell = igashell, 
     penalty = 1e7
 )
 push!(data.constraints, etf)
 
 #Force
-edgeset = VertexInterfaceIndex(getvertexset(data.grid, "right"), 2)
+
 etf = IGAShellExternalForce(
-    set = edgeset, 
+    set = edgeset_top_right, 
     func = (x,t) -> [0.0, -1.0/b],
     igashell = igashell
 )
@@ -149,7 +167,7 @@ output = OutputData(
         comps = [DIM]
     ),
     interval = 0.0,
-    set      = edgeset
+    set      = edgeset_top_right
 )
 data.outputdata["reactionforce"] = output
 
@@ -161,8 +179,9 @@ Five.push_vtkoutput!(data.output[], vtkoutput)
 
 #
 vtkoutput = VTKNodeOutput(
-    type = MaterialStateOutput(
-        field = :interface_damage
+    type = IGAShellMaterialStateOutput(
+        field = :interface_damage,
+        dir = 2
     ),
 )
 Five.push_vtkoutput!(data.output[], vtkoutput)
@@ -202,7 +221,7 @@ state, globaldata = build_problem(data) do dh, parts, dbc
     JuAFEM.copy!!(dbc.free_dofs, alldofs)
 end
 
-solver = LocalDissipationSolver(
+solver = DissipationSolver(
     Δλ0          = 10.0,
     Δλ_max       = 10.0,
     Δλ_min       = 1e-2,
@@ -218,7 +237,7 @@ solver = LocalDissipationSolver(
     λ_max        = 700.0,
     λ_min        = -50.0,
     tol          = 1e-4,
-    max_residual = 1e5
+    max_residual = 1e6
 )
 
 
@@ -226,5 +245,12 @@ solver = LocalDissipationSolver(
 
 output = solvethis(solver, state, globaldata)
 
+exp_u = [0.0, 7.876, 7.876, 13.929, 13.929]
+exp_f = [0.0, 601.935, 373.548, 671.613, 250]
+
 d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(output.outputdata["reactionforce"].data)]
 f = [output.outputdata["reactionforce"].data[i].forces for i in 1:length(output.outputdata["reactionforce"].data)]
+
+fig = plot(reuse = false)
+plot!(fig, exp_u, exp_f, label = "Experiment")
+plot!(fig, abs.(d), abs.(f), label = "Non-addaptive")

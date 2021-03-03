@@ -7,5 +7,6 @@ log.txt
 *.out
 submit
 interact.txt
+examples/*
 examples/paraview/*
 *.png
