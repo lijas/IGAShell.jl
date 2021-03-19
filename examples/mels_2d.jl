@@ -32,7 +32,7 @@ data = ProblemData(
     η    = 1.6
 ) =#
 
-interfacematerial = Five.MatVanDenBosch{2}(
+interfacematerial = Five.MatVanDenBosch(
     σₘₐₓ = 60 * 0.5,
     τₘₐₓ = 90 * 0.5,
     Φₙ = 211.0/1000,
