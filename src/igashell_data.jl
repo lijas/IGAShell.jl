@@ -333,7 +333,6 @@ end
 struct IGAShellData{dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial}
     layer_materials::Vector{LM}
     interface_material::IM
-    viscocity_parameter::T
     orders::NTuple{dim_s,Int}
     knot_vectors::NTuple{dim_p,Vector{T}}
     thickness::T
@@ -343,11 +342,15 @@ struct IGAShellData{dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCoh
     initial_cellstates::Vector{CELLSTATE}
     initial_interface_damages::Matrix{T}    
     adaptable::Bool                         
-    LIMIT_UPGRADE_INTERFACE::T              
+    limit_stress_criterion::T         
+    limit_damage_criterion::T     
+    search_radius::T
+    locked_elements::Vector{Int}
     small_deformations_theory::Bool         
     nqp_inplane_order::Int
     nqp_ooplane_per_layer::Int
     nqp_interface_order::Int                  
+    add_czcells_vtk::Bool
 end
 
 function IGAShellData(;
@@ -359,15 +362,28 @@ function IGAShellData(;
     initial_cellstates::Vector{CELLSTATE},
     nqp_inplane_order::Int,
     nqp_ooplane_per_layer::Int,
-    viscocity_parameter::T                  = 0.0,
     width::T                                = 1.0, #Only used in 2d,
     nlayers::Int                            = length(layer_materials),
     zcoords::Vector{T}                      = collect(-thickness/2:(thickness/nlayers):thickness/2),
     initial_interface_damages::Matrix{T}    = zeros(Float64, nlayers-1, length(initial_cellstates)),
     adaptable::Bool                         = false,
-    LIMIT_UPGRADE_INTERFACE::T              = 0.01,
+    limit_stress_criterion::T               = nothing,
+    limit_damage_criterion::T               = nothing,
+    search_radius::T                        = nothing,
+    locked_elements::AbstractVector{Int}    = Int[],
     small_deformations_theory::Bool         = false,
-    nqp_interface_order::Int                = nqp_inplane_order) where {dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial}
+    nqp_interface_order::Int                = nqp_inplane_order,
+    add_czcells_vtk::Bool                   = true) where {dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial}
+
+    if adaptable
+        if (limit_stress_criterion === nothing ||
+            limit_damage_criterion === nothing ||
+            search_radius === nothing ||
+            locked_elements === nothing)
+
+            error("If adaptive IGASHELL is defined, you must specify all variables related to adaptivity.")
+        end
+    end
 
     #-----
     ninterfaces = nlayers-1
@@ -375,30 +391,10 @@ function IGAShellData(;
     @assert(size(initial_interface_damages)[1] == ninterfaces)
     @assert(size(initial_interface_damages)[2] == ncells)
     dim_s == 3 && @assert(width == 1.0)
-    @show nqp_ooplane_per_layer
-    return IGAShellData(layer_materials, interface_material, viscocity_parameter, orders, knot_vectors, thickness, width, nlayers, zcoords, initial_cellstates, initial_interface_damages, adaptable, LIMIT_UPGRADE_INTERFACE, small_deformations_theory, nqp_inplane_order, nqp_ooplane_per_layer, nqp_interface_order)
+
+    return IGAShellData(layer_materials, interface_material, orders, knot_vectors, thickness, width, nlayers, zcoords, initial_cellstates, initial_interface_damages, adaptable, limit_stress_criterion, limit_damage_criterion, search_radius, collect(locked_elements), small_deformations_theory, nqp_inplane_order, nqp_ooplane_per_layer, nqp_interface_order, add_czcells_vtk)
 
 end
-
-#=function IGAShellData{dim_s}(mat::LM, imat::IM, viscocity_parameter::T, orders, knot_vectors, thickness::T, width::T, nlayers::Int, cellstate::Vector{CELLSTATE}, initial_interface_damages::Matrix{T}, adaptable::Bool,small_deformations_theory::Bool, LIMIT_UPGRADE_INTERFACE::T, qp_inplane_order, nqp_ooplane_per_layer, nqp_interface) where {dim_s,LM<:AbstractMaterial,IM,T}
-    ninterfaces = nlayers-1
-    ncells = length(cellstate)
-    @assert(size(initial_interface_damages)[1] == ninterfaces)
-    @assert(size(initial_interface_damages)[2] == ncells)
-    dim_s == 3 && @assert(width == 1.0)
-
-    dim_p = dim_s-1
-    zcoords = collect(-thickness/2:(thickness/nlayers):thickness/2)
-    return IGAShellData{dim_p,dim_s,T,LM,IM}(
-        mat, imat, viscocity_parameter,
-        orders, knot_vectors,
-        zcoords, thickness, width, nlayers,
-        cellstate,
-        initial_interface_damages, 
-        adaptable, small_deformations_theory, LIMIT_UPGRADE_INTERFACE,
-        qp_inplane_order, nqp_ooplane_per_layer, nqp_interface     
-    )
-end=#
 
 nlayers(data::IGAShellData) = data.nlayers
 JuAFEM.getncells(data::IGAShellData) = length(data.initial_cellstates)
@@ -420,5 +416,6 @@ getnquadpoints_ooplane_per_layer(data::IGAShellData) = data.nqp_ooplane_per_laye
 
 getwidth(data::IGAShellData) = data.width
 
-viscocity_parameter(data::IGAShellData) = data.viscocity_parameter
-LIMIT_UPGRADE_INTERFACE(data::IGAShellData) = data.LIMIT_UPGRADE_INTERFACE
+LIMIT_STRESS_CRITERION(data::IGAShellData) = data.limit_stress_criterion
+LIMIT_DAMAGE_VARIABLE(data::IGAShellData) = data.limit_damage_criterion
+PROPAGATION_SEARCH_RADIUS(data::IGAShellData) = data.search_radius

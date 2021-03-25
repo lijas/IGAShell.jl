@@ -7,6 +7,7 @@ Also stores the bezier-extraction operators for getting the new dofvalues of a c
 struct IGAShellAdaptivity{T}
     cellstates::Vector{CELLSTATE}
     control_point_states::Vector{CPSTATE}
+    propagation_checked::Matrix{Bool}
 
     lumped2layered::IGA.BezierExtractionOperator{T}
     layered2fullydiscont::IGA.BezierExtractionOperator{T}
@@ -91,7 +92,9 @@ function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, cell_connectivity
 
     end
     
-    return IGAShellAdaptivity(data.initial_cellstates, node_states, 
+    propagation_checked = [false for _ in 1:ninterfaces, _ in 1:ncells]
+
+    return IGAShellAdaptivity(data.initial_cellstates, node_states, propagation_checked,
                               Clu2la, Cla2di, Clu2di, 
                               weakdiscont2discont, strongdiscont2discont,
                               interface_knots, order)

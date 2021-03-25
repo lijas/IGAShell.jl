@@ -32,7 +32,7 @@ data = ProblemData(
     η    = 1.6
 ) =#
 
-interfacematerial = Five.MatVanDenBosch(
+interfacematerial = Five.MatCZKolluri(
     σₘₐₓ = 60 * 0.5,
     τₘₐₓ = 90 * 0.5,
     Φₙ = 211.0/1000,
@@ -74,10 +74,10 @@ addvertexset!(data.grid, "zfixed", (x)-> x[1] ≈ 9.5)
 #@show getindex.(getproperty.(grid.nodes, :x), 1)
 #@show length(getvertexset(grid, "zfixed"))
 
-cellstates = [IgAShell.LAYERED for i in 1:NELX]
-#cellstates[precracked_u] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
-#cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3))
-cellstates = [IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3)) for i in 1:NELX]
+cellstates = [IgAShell.LUMPED for i in 1:NELX]
+cellstates[precracked_u] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
+cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3))
+#cellstates = [IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3)) for i in 1:NELX]
 cellstates[1:10] .= IgAShell.LAYERED
 
 interface_damage = zeros(ninterfaces, NELX)
@@ -89,7 +89,6 @@ igashelldata =
 IgAShell.IGAShellData(;
     layer_materials           = layermats,
     interface_material        = interfacematerial,
-    viscocity_parameter       = 0.0,
     orders                    = ORDERS,
     knot_vectors              = nurbsmesh.knot_vectors,
     thickness                 = h,
@@ -98,9 +97,12 @@ IgAShell.IGAShellData(;
     initial_interface_damages = interface_damage,
     nqp_inplane_order         = 3,
     nqp_ooplane_per_layer     = 2,
-    adaptable                 = false,
+    adaptable                 = true,
+        limit_stress_criterion   = 0.993,
+        limit_damage_criterion   = 0.01,
+        search_radius            = 10.0,
+        locked_elements          = 1:10,
     small_deformations_theory = false,
-    LIMIT_UPGRADE_INTERFACE   = 0.03,
     nqp_interface_order       = 4
 )  
 
@@ -221,7 +223,7 @@ state, globaldata = build_problem(data) do dh, parts, dbc
     JuAFEM.copy!!(dbc.free_dofs, alldofs)
 end
 
-solver = DissipationSolver(
+solver = LocalDissipationSolver(
     Δλ0          = 10.0,
     Δλ_max       = 10.0,
     Δλ_min       = 1e-2,
@@ -251,6 +253,7 @@ exp_f = [0.0, 601.935, 373.548, 671.613, 250]
 d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(output.outputdata["reactionforce"].data)]
 f = [output.outputdata["reactionforce"].data[i].forces for i in 1:length(output.outputdata["reactionforce"].data)]
 
+using Plots; pyplot(); PyPlot.pygui(true)
 fig = plot(reuse = false)
 plot!(fig, exp_u, exp_f, label = "Experiment")
-plot!(fig, abs.(d), abs.(f), label = "Non-addaptive")
+plot!(fig, abs.(d), abs.(f), mark=:o, label = "Non-addaptive")

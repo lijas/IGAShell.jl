@@ -82,7 +82,6 @@ function get_curved_mesh(cellstate; h, b, R)
     IgAShell.IGAShellData(;
         layer_materials           = layermats,
         interface_material        = interfacematerial,
-        viscocity_parameter       = 0.0,
         orders                    = (orders..., r),
         knot_vectors              = nurbsmesh.knot_vectors,
         thickness                 = h,
