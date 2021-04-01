@@ -252,6 +252,7 @@ Gets the interface damage at the nodes by taking the mean of the damage at all q
 """
 function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNodeOutput{<:IGAShellMaterialStateOutput}, state::StateVariables, globaldata) where {dim_p,dim_s,T}
 
+    n_damage_paras = Five.n_damage_parameters(igashell.layerdata.interface_material)
     n_vtknodes_per_layer = prod(vtkdata(igashell).n_plot_points_dim)::Int
     n_vtknodes_per_cell = n_vtknodes_per_layer * nlayers(igashell)
     n_vtknodes_inplane = prod(vtkdata(igashell).n_plot_points_dim[1:dim_p])::Int
@@ -261,7 +262,7 @@ function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNod
     vtkcellcount = 1
     nvtkcells = nvtkcells_per_layer(vtkdata(igashell)) * nlayers(igashell) * getncells(igashell)
     cellstates = zeros(Int, nvtkcells)
-    vtk_node_damage = fill(0.0, n_vtknodes_per_cell * getncells(igashell))
+    vtk_node_damage = fill(0.0, n_damage_paras, n_vtknodes_per_cell * getncells(igashell))
     for (ic, cellid) in enumerate(igashell.cellset)
 
         #Since all cells in IGAShell has its set of non connected nodes, 
@@ -270,13 +271,19 @@ function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNod
 
         for ilay in 1:ninterfaces(igashell)
             interfacestates = state.partstates[ic].interfacestates[:,ilay]
-            mean_damage = mean(interface_damage.(interfacestates, output.type.dir))
+
+            mean_damages = zeros(T, n_damage_paras)
+            for i in 1:n_damage_paras
+                mean_damages[i] = mean(interface_damage.(interfacestates, i))
+            end
             
             layer_offset =  (ilay-1)*n_vtknodes_per_layer  +  n_vtknodes_inplane*(n_vtknodes_oop_per_layer-1)
 
             for i in 1:n_vtknodes_inplane*2
                 nodeidx = i + cell_offset + layer_offset
-                vtk_node_damage[nodeidx] = mean_damage
+                for i in 1:n_damage_paras
+                    vtk_node_damage[i, nodeidx] = mean_damages[i]
+                end
             end
         end
     end

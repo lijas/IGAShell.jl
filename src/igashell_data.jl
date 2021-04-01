@@ -378,8 +378,7 @@ function IGAShellData(;
     if adaptable
         if (limit_stress_criterion === nothing ||
             limit_damage_criterion === nothing ||
-            search_radius === nothing ||
-            locked_elements === nothing)
+            search_radius === nothing)
 
             error("If adaptive IGASHELL is defined, you must specify all variables related to adaptivity.")
         end

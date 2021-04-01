@@ -26,11 +26,15 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
                 continue
             end
 
-            interface_damage_variables = interface_damage.(cell_material_states.interfacestates[:, iint], 2)
+            HARDCODED_DIR = 2
+            interface_damage_variables = interface_damage.(cell_material_states.interfacestates[:, iint], HARDCODED_DIR)
 
             upgrade_list = determine_crack_growth(dh, igashell, interface_damage_variables, cellid, iint)
 
             for nodeid in upgrade_list
+
+                nodeid in igashell.adaptivity.locked_control_points && continue
+
                 igashell.adaptivity.propagation_checked[iint, ic] = true
 
                 println("Propagation was determined for $cellid, interface $iint, $(mean(interface_damage_variables))")
@@ -123,7 +127,7 @@ function determine_crack_growth(dh::MixedDofHandler, igashell::IGAShell, interfa
             #Get position of the node
             pos1 = dh.grid.nodes[cpid].x
 
-            #Loop over all controlpoints
+            #Loop over all controlpoints to see if they are withing search radius
             for jcp in 1:ncontroloints
                 cp_state = get_controlpoint_state(adapdata(igashell), jcp)
 

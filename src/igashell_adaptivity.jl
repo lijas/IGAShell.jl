@@ -8,6 +8,7 @@ struct IGAShellAdaptivity{T}
     cellstates::Vector{CELLSTATE}
     control_point_states::Vector{CPSTATE}
     propagation_checked::Matrix{Bool}
+    locked_control_points::Vector{Int}
 
     lumped2layered::IGA.BezierExtractionOperator{T}
     layered2fullydiscont::IGA.BezierExtractionOperator{T}
@@ -94,7 +95,17 @@ function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, cell_connectivity
     
     propagation_checked = [false for _ in 1:ninterfaces, _ in 1:ncells]
 
-    return IGAShellAdaptivity(data.initial_cellstates, node_states, propagation_checked,
+    #Some cells are not allowed to be upgraded (locked).. store the contorl points of these cells
+    locked_control_points = Int[]
+    for cellid in data.locked_elements
+        for cell_nodes in cell_connectivity[:, cellid]
+            for nodeid in cell_nodes
+                push!(locked_control_points, nodeid)
+            end
+        end
+    end
+
+    return IGAShellAdaptivity(data.initial_cellstates, node_states, propagation_checked, locked_control_points,
                               Clu2la, Cla2di, Clu2di, 
                               weakdiscont2discont, strongdiscont2discont,
                               interface_knots, order)

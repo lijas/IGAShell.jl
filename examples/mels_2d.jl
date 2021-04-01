@@ -78,7 +78,7 @@ cellstates = [IgAShell.LUMPED for i in 1:NELX]
 cellstates[precracked_u] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE(3)
 cellstates[precracked_l] .= IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3))
 #cellstates = [IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE((1,3)) for i in 1:NELX]
-cellstates[1:10] .= IgAShell.LAYERED
+#cellstates[1:10] .= IgAShell.LAYERED
 
 interface_damage = zeros(ninterfaces, NELX)
 interface_damage[1, precracked_l] .= 1.0
@@ -98,10 +98,10 @@ IgAShell.IGAShellData(;
     nqp_inplane_order         = 3,
     nqp_ooplane_per_layer     = 2,
     adaptable                 = true,
-        limit_stress_criterion   = 0.993,
+        limit_stress_criterion   = 10.993,
         limit_damage_criterion   = 0.01,
         search_radius            = 10.0,
-        locked_elements          = 1:10,
+        locked_elements          = Int[],
     small_deformations_theory = false,
     nqp_interface_order       = 4
 )  
