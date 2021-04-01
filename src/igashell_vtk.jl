@@ -104,25 +104,26 @@ function _init_vtk_cell!(igashell::IGAShell{dim_p,dim_s}, cls, node_coords, cv, 
         end 
     end
 
-    #=
-    for iint in 1:ninterfaces(igashell)
-        for index in indeces
-            nodeids = Int[]
-            for a in 1:2^dim_s
-                nodendex = Tuple(index).+ Tuple(addons[a]) .-1
-                _nodeid = nodeind2nodeid[nodendex...]
-                push!(nodeids, _nodeid)
-            end
+    if igashell.layerdata.add_czcells_vtk
+        for iint in 1:ninterfaces(igashell)
+            for index in indeces
+                nodeids = Int[]
+                for a in 1:2^dim_s
+                    nodendex = Tuple(index).+ Tuple(addons[a]) .-1
+                    _nodeid = nodeind2nodeid[nodendex...]
+                    push!(nodeids, _nodeid)
+                end
 
-            #Cohesive
-            VTK_CELL = (dim_s==2) ? JuAFEM.VTKCellTypes.VTK_QUAD : JuAFEM.VTKCellTypes.VTK_HEXAHEDRON
-            localids = (dim_s==2) ? [3,4] : [5,6,8,7]
-            nodeids = vcat(nodeids[localids], nodeids[localids] .+ n_plot_points_inp*(n_plot_points_oop-1))
-            
-            push!(cls, MeshCell(VTK_CELL, nodeids .+ node_offset .+ (iint-1)*n_plot_points))
+                #Cohesive
+                VTK_CELL = (dim_s==2) ? JuAFEM.VTKCellTypes.VTK_QUAD : JuAFEM.VTKCellTypes.VTK_HEXAHEDRON
+                localids = (dim_s==2) ? [3,4] : [5,6,8,7]
+                nodeids = vcat(nodeids[localids], nodeids[localids] .+ n_plot_points_inp*(n_plot_points_oop-1))
+                
+                push!(cls, MeshCell(VTK_CELL, nodeids .+ node_offset .+ (iint-1)*n_plot_points))
+            end
         end
     end
-    =#
+    
     
 end
 
@@ -204,27 +205,39 @@ function Five.get_vtk_celldata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKCel
 
     vtkcellcount = 1
     nvtkcells = nvtkcells_per_layer(vtkdata(igashell)) * nlayers(igashell) * getncells(igashell) #+ 
-                #nvtkcells_per_interface(vtkdata(igashell)) * ninterfaces(igashell) * getncells(igashell)
+    
+    if igashell.layerdata.add_czcells_vtk 
+        nvtkcells +=  nvtkcells_per_interface(vtkdata(igashell)) * ninterfaces(igashell) * getncells(igashell)
+    end
 
     cellstates = zeros(Int, nvtkcells)
     for (ic, cellid) in enumerate(igashell.cellset)
         cellstate = getcellstate(adapdata(igashell), ic)
         for ilay in 1:nlayers(igashell)
             for vtkcell in nvtkcells_per_layer(vtkdata(igashell))
-                cellstates[vtkcellcount] = cellstate.state
+                cellnodes = zeros(Int, JuAFEM.nnodes_per_cell(igashell, ic))
+                cellconectivity = cellconectivity!(cellnodes, igashell, ic)
+                tmp_cellstate = get_controlpoint_state(adapdata(igashell), cellconectivity[1])
+                for (i, nodeid) in enumerate(cellconectivity[2:end])
+                    cp_state = get_controlpoint_state(adapdata(igashell), nodeid)
+                    tmp_cellstate = tmp_cellstate.state > cp_state.state ? tmp_cellstate : cp_state
+                end
+                cellstates[vtkcellcount] = get_cellstate_color(tmp_cellstate)
                 vtkcellcount += 1
             end
         end
-        for iint in 1:ninterfaces(igashell)
-            interface_state = LUMPED
-            if is_interface_active(cellstate, iint)
-                interface_state = FULLY_DISCONTINIUOS
-            end
+        if igashell.layerdata.add_czcells_vtk
+            for iint in 1:ninterfaces(igashell)
+                state_color = -1
+                if is_interface_active(cellstate, iint)
+                    state_color = 6
+                end
 
-            #=for vtkcell in nvtkcells_per_layer(vtkdata(igashell))
-                cellstates[vtkcellcount] = interface_state.state
-                vtkcellcount += 1
-            end=#
+                for vtkcell in nvtkcells_per_layer(vtkdata(igashell))
+                    cellstates[vtkcellcount] = state_color
+                    vtkcellcount += 1
+                end
+            end
         end
     end
 
@@ -239,6 +252,7 @@ Gets the interface damage at the nodes by taking the mean of the damage at all q
 """
 function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNodeOutput{<:IGAShellMaterialStateOutput}, state::StateVariables, globaldata) where {dim_p,dim_s,T}
 
+    n_damage_paras = Five.n_damage_parameters(igashell.layerdata.interface_material)
     n_vtknodes_per_layer = prod(vtkdata(igashell).n_plot_points_dim)::Int
     n_vtknodes_per_cell = n_vtknodes_per_layer * nlayers(igashell)
     n_vtknodes_inplane = prod(vtkdata(igashell).n_plot_points_dim[1:dim_p])::Int
@@ -248,7 +262,7 @@ function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNod
     vtkcellcount = 1
     nvtkcells = nvtkcells_per_layer(vtkdata(igashell)) * nlayers(igashell) * getncells(igashell)
     cellstates = zeros(Int, nvtkcells)
-    vtk_node_damage = fill(0.0, n_vtknodes_per_cell * getncells(igashell))
+    vtk_node_damage = fill(0.0, n_damage_paras, n_vtknodes_per_cell * getncells(igashell))
     for (ic, cellid) in enumerate(igashell.cellset)
 
         #Since all cells in IGAShell has its set of non connected nodes, 
@@ -257,13 +271,19 @@ function Five.get_vtk_nodedata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKNod
 
         for ilay in 1:ninterfaces(igashell)
             interfacestates = state.partstates[ic].interfacestates[:,ilay]
-            mean_damage = mean(interface_damage.(interfacestates, output.type.dir))
+
+            mean_damages = zeros(T, n_damage_paras)
+            for i in 1:n_damage_paras
+                mean_damages[i] = mean(interface_damage.(interfacestates, i))
+            end
             
             layer_offset =  (ilay-1)*n_vtknodes_per_layer  +  n_vtknodes_inplane*(n_vtknodes_oop_per_layer-1)
 
             for i in 1:n_vtknodes_inplane*2
                 nodeidx = i + cell_offset + layer_offset
-                vtk_node_damage[nodeidx] = mean_damage
+                for i in 1:n_damage_paras
+                    vtk_node_damage[i, nodeidx] = mean_damages[i]
+                end
             end
         end
     end

@@ -67,7 +67,6 @@ igashelldata =
 IgAShell.IGAShellData(;
     layer_materials           = layermats,
     interface_material        = interfacematerial,
-    viscocity_parameter       = 0.0,
     orders                    = ORDERS,
     knot_vectors              = nurbsmesh.knot_vectors,
     thickness                 = h,
@@ -77,8 +76,10 @@ IgAShell.IGAShellData(;
     nqp_inplane_order         = 3,
     nqp_ooplane_per_layer     = 4,
     adaptable                 = true,
+        limit_stress_criterion   = 0.5,
+        limit_damage_criterion   = 0.01,
+        search_radius            = 10.0,
     small_deformations_theory = false,
-    LIMIT_UPGRADE_INTERFACE   = 0.04,
     nqp_interface_order       = 4
 )  
 
@@ -148,8 +149,9 @@ Five.push_vtkoutput!(data.output[], vtkoutput)
 
 #
 vtkoutput = VTKNodeOutput(
-    type = MaterialStateOutput(
-        field = :interface_damage
+    type = IGAShellMaterialStateOutput(
+        field = :interface_damage,
+        dir = 2
     ),
 )
 Five.push_vtkoutput!(data.output[], vtkoutput)

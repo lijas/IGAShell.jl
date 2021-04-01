@@ -481,7 +481,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
             if assemtype == IGASHELL_STIFFMAT
             @timeit "integrate_cohesive" A += integrate_cohesive_forcevector_and_stiffnessmatrix!(
                                                         cv_cohesive_top, cv_cohesive_bot,
-                                                        interface_material(igashell), viscocity_parameter(layerdata(igashell)), 
+                                                        interface_material(igashell), 
                                                         states,
                                                         ike, ife,                
                                                         ue_interface, 
@@ -496,7 +496,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
 
                 @timeit "integrate_cohesive_fstar" integrate_cohesive_fstar!(
                                                             cv_cohesive_top, cv_cohesive_bot,
-                                                            interface_material(igashell), viscocity_parameter(layerdata(igashell)), 
+                                                            interface_material(igashell), 
                                                             ⁿstates,
                                                             ike, ife,                
                                                             ue_interface, 
@@ -509,7 +509,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
                 ge = Base.RefValue(zero(T))
                 @timeit "integrate_cohesive_dissi" integrate_dissipation!(
                                                             cv_cohesive_top, cv_cohesive_bot,
-                                                            interface_material(igashell), viscocity_parameter(layerdata(igashell)), 
+                                                            interface_material(igashell), 
                                                             states,
                                                             ge, ife,                
                                                             ue_interface, 
@@ -760,7 +760,7 @@ end
 
 function integrate_cohesive_forcevector_and_stiffnessmatrix!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
-    material::Five.AbstractMaterial, ξ::T,
+    material::Five.AbstractMaterial,
     materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ke::AbstractMatrix, 
     fe::AbstractVector, 
@@ -803,14 +803,6 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
 
-        #Add viscocity term
-        #K = 1.0 #initial_stiffness(material)
-        #σᵛ = ξ *K .* ΔJ/Δt
-        #∂σᵛ∂J = ξ * K/Δt * one(SymmetricTensor{2,dim_s,T})
-
-        #∂t∂J += ∂σᵛ∂J
-        #t += σᵛ
-
         #if iszero(t̂)
         #    continue
         #end
@@ -832,7 +824,7 @@ end
 
 function integrate_cohesive_fstar!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
-    material::Five.AbstractMaterial, ξ::T,
+    material::Five.AbstractMaterial, 
     materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ke::AbstractMatrix, 
     fe::AbstractVector, 
@@ -867,14 +859,6 @@ function integrate_cohesive_fstar!(
         t = R⋅t̂
         ∂t∂J = R⋅∂t∂Ĵ⋅R'
 
-        #Add viscocity term
-        #K = 1.0 #initial_stiffness(material)
-        #σᵛ = ξ *K .* ΔJ/Δt
-        #∂σᵛ∂J = ξ * K/Δt * one(SymmetricTensor{2,dim_s,T})
-
-        #∂t∂J += ∂σᵛ∂J
-        #t += σᵛ
-
         #if iszero(t̂)
         #    continue
         #end
@@ -890,7 +874,7 @@ end
 
 function integrate_dissipation!(
     cv_top::IGAShellValues{dim_s,dim_p,T}, cv_bot,
-    material::Five.AbstractMaterial, ξ::T,
+    material::Five.AbstractMaterial,
     materialstate::AbstractArray{<:Five.AbstractMaterialState}, 
     ge::Base.RefValue, 
     fe::AbstractVector, 

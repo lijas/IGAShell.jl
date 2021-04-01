@@ -215,3 +215,21 @@ _convert_2_3dstate
 function _convert_2_3dstate(σ::SymmetricTensor{2,2,T}) where T
     return SymmetricTensor{2,3,T,6}((σ[1,1], T(0.0), σ[1,2], T(0.0), T(0.0), σ[2,2]))
 end
+
+#
+function get_cellstate_color(state::Union{CELLSTATE, CPSTATE})
+    if state.state == _LUMPED
+        return _LUMPED
+    elseif state.state == _LAYERED
+        return _LAYERED
+    elseif is_weak_discontiniuos(state)
+        return _FULLY_DISCONTINIUOS
+    elseif is_strong_discontiniuos(state)
+        return _FULLY_DISCONTINIUOS
+    elseif is_fully_discontiniuos(state)
+        return _FULLY_DISCONTINIUOS
+    elseif is_mixed(state)
+        error("Should not happen")
+    end
+
+end

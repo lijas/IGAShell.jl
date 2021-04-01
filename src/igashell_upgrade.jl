@@ -9,9 +9,46 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
     #copy of the current node states
     node_states = deepcopy(adapdata(igashell).control_point_states)
 
-    # Loop through all elements, and check which elements need to upgrade
-    # based on the stress values
+    #
+    # Loop through all elements and check damage variables for stress propagation
+    #
     for (ic, cellid) in enumerate(igashell.cellset)
+
+        cellid in igashell.layerdata.locked_elements && continue
+
+        cellstate = getcellstate(adapdata(igashell), ic)
+        
+        cell_material_states = state.partstates[ic]
+
+        for iint in 1:ninterfaces(igashell)
+            
+            if igashell.adaptivity.propagation_checked[iint, ic] == true
+                continue
+            end
+
+            HARDCODED_DIR = 2
+            interface_damage_variables = interface_damage.(cell_material_states.interfacestates[:, iint], HARDCODED_DIR)
+
+            upgrade_list = determine_crack_growth(dh, igashell, interface_damage_variables, cellid, iint)
+
+            for nodeid in upgrade_list
+
+                nodeid in igashell.adaptivity.locked_control_points && continue
+
+                igashell.adaptivity.propagation_checked[iint, ic] = true
+
+                println("Propagation was determined for $cellid, interface $iint, $(mean(interface_damage_variables))")
+                node_states[nodeid] = insert_interface(node_states[nodeid], iint, ninterfaces(igashell))
+            end
+        end
+    end
+
+    #
+    # Loop through all elements, and check which elements need to upgrade based on the stress values
+    #
+    for (ic, cellid) in enumerate(igashell.cellset)
+
+        cellid in igashell.layerdata.locked_elements && continue
 
         cellstate = getcellstate(adapdata(igashell), ic)
         recovory_stress_data = @view srdata(igashell).recovered_stresses[:,ic]
@@ -20,10 +57,8 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
         _should_upgrade, upgrade_to = determine_upgrade(igashell, recovory_stress_data, constitutive_stress_data, cellstate)
 
         if _should_upgrade
-            println("Upgrade was determined for $cellid, $cellstate -> $upgrade_to")
+            println("Initiation was determined for $cellid, $cellstate -> $upgrade_to")
 
-            setcellstate!(adapdata(igashell), ic, upgrade_to)
-            
             # Loop through all nodes for this cell and set the state 
             # of the node to the state of the cell, if it is an "upgrade"
             for (i, nodeid) in enumerate(igashell.cell_connectivity[:, ic])
@@ -69,6 +104,55 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
     return instructions
 end
 
+function determine_crack_growth(dh::MixedDofHandler, igashell::IGAShell, interface_damage_variables::Vector{Float64}, cellid::Int, iint::Int)
+
+    cp_to_upgrade = Int[]
+
+    ncontroloints = length(igashell.adaptivity.control_point_states)
+    nnodes = JuAFEM.nnodes_per_cell(igashell)
+    cellnodes = zeros(Int, nnodes)
+    
+    #
+    #Check propation
+    #
+    mean_damage = mean(interface_damage_variables)
+    if mean_damage > LIMIT_DAMAGE_VARIABLE(layerdata(igashell))
+
+        #Get all nodeids in this cell,
+        JuAFEM.cellnodes!(cellnodes, dh, cellid)
+        
+        #Loop over all nodes in the cell
+        for cpid in cellnodes
+
+            #Get position of the node
+            pos1 = dh.grid.nodes[cpid].x
+
+            #Loop over all controlpoints to see if they are withing search radius
+            for jcp in 1:ncontroloints
+                cp_state = get_controlpoint_state(adapdata(igashell), jcp)
+
+                #Skip if alrady active interface
+                if is_interface_active(cp_state, iint)
+                    continue
+                end
+
+                
+                #Check if controlpoint is within search radius
+                if norm(pos1 - dh.grid.nodes[jcp].x) < PROPAGATION_SEARCH_RADIUS(layerdata(igashell))
+                    #Skip if this node is in the cell we are currently uppgrading
+                    if jcp in cellnodes
+                        continue
+                    end
+                    push!(cp_to_upgrade, jcp)
+                end
+            end
+        end
+    end
+
+    return cp_to_upgrade
+
+end
+
 function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T}, 
                            recovory_stress_data::AbstractVector{<:RecoveredStresses}, 
                            constitutive_stress_data::AbstractMatrix{<:Five.AbstractMaterialState}, 
@@ -88,13 +172,9 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
     nqp_inp = getnquadpoints_inplane(igashell)
 
     for iint in 1:ninterfaces(igashell)
-
+        
         #If interface already delaminated, ignore this interface
         if is_interface_active(cellstate, iint) && !is_mixed(cellstate) 
-            continue
-        end
-
-        if !(iint == 1 || iint == 3)
             continue
         end
 
@@ -106,12 +186,12 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
             σᶻˣ, σᶻʸ, σᶻᶻ = _get_interface_stress_layered(constitutive_stress_data, iint, nqp_oop_per_layer, nqp_inp, dim_p)
         end
         
-        #
+
         macl(x) = (x<=0 ? (0.0) : x)
         F = (σᶻˣ/ τᴹ)^2 + (σᶻʸ / τᴹ)^2 + (macl(σᶻᶻ) / σᴹ)^2
-        #@show cellstate, F, σᶻᶻ, σᶻʸ, σᶻˣ
-        if F > LIMIT_UPGRADE_INTERFACE(layerdata(igashell))
-            new_cellstate = insert_interface(new_cellstate, iint, ninterfaces(igashell))#combine_states(new_cellstate, WEAK_DISCONTINIUOS_AT_INTERFACE(iint), ninterfaces(igashell))
+
+        if F > LIMIT_STRESS_CRITERION(layerdata(igashell))
+            new_cellstate = insert_interface(new_cellstate, iint, ninterfaces(igashell))
             cell_upgraded = true
         end
     end
