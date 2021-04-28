@@ -213,8 +213,8 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
 
     iqr_inp_cohesive = QuadratureRule{dim_p,RefCube}(data.nqp_interface_order)
     oqr_cohesive = generate_cohesive_oop_quadraturerule(data.zcoords)
-    iqr_sides =  JuAFEM.create_face_quad_rule(QuadratureRule{dim_p-1,RefCube}(5), Lagrange{dim_p,RefCube,1}()) #HARDCODED
-    iqr_vertices =  JuAFEM.create_face_quad_rule(QuadratureRule{0,RefCube}(0), Lagrange{dim_p,RefCube,1}()) #HARDCODED
+    iqr_sides =  Ferrite.create_face_quad_rule(QuadratureRule{dim_p-1,RefCube}(5), Lagrange{dim_p,RefCube,1}()) #HARDCODED
+    iqr_vertices =  Ferrite.create_face_quad_rule(QuadratureRule{0,RefCube}(0), Lagrange{dim_p,RefCube,1}()) #HARDCODED
 
     #Create knot vectors for layers, lumped and dinscont
     knot_lumped = generate_knot_vector(order, data.nlayers-1, 0)

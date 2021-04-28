@@ -6,7 +6,7 @@ function IGAShellVTK(data::IGAShellData{dim_p,dim_s,T}) where {dim_p,dim_s,T}
     @assert prod(n_plot_points_dim .- 1) == 1
 
     mid_ip = getmidsurface_ip(data)
-    _refcoords = JuAFEM.reference_coordinates(IGA.BernsteinBasis{dim_p,n_plot_points_dim[1:dim_p].-1}())
+    _refcoords = Ferrite.reference_coordinates(IGA.BernsteinBasis{dim_p,n_plot_points_dim[1:dim_p].-1}())
     plot_point_inplane = QuadratureRule{dim_p,RefCube,T}(zeros(T,length(_refcoords)), _refcoords)
     
     order = data.orders[dim_s]
@@ -40,12 +40,12 @@ shell in VTK.
 The code is not very pretty, and is mostly a hack...
 
 """
-function _init_vtk_grid!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}) where {dim_p,dim_s,T}
+function _init_vtk_grid!(dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}) where {dim_p,dim_s,T}
 
     node_coords = Vec{dim_s,T}[]
     cls = MeshCell[]
     node_offset = 0
-    coords = zeros(Vec{dim_s,T}, JuAFEM.nnodes_per_cell(igashell))
+    coords = zeros(Vec{dim_s,T}, Ferrite.nnodes_per_cell(igashell))
     bezier_coords = similar(coords)
     cv_plot = vtkdata(igashell).cell_values_plot
     n_plot_points_dims = vtkdata(igashell).n_plot_points_dim
@@ -55,7 +55,7 @@ function _init_vtk_grid!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p
         
         Ce = get_extraction_operator(intdata(igashell), ic)
         
-        JuAFEM.cellcoords!(coords, dh, cellid)
+        Ferrite.cellcoords!(coords, dh, cellid)
         bezier_coords .= IGA.compute_bezier_points(Ce, coords)
         
         IGA.set_bezier_operator!(cv_plot, Ce)
@@ -66,8 +66,8 @@ function _init_vtk_grid!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p
         node_offset = length(node_coords)
     end
 
-    JuAFEM.copy!!(igashell.vtkdata.node_coords, copy(node_coords))
-    JuAFEM.copy!!(igashell.vtkdata.cls, copy(cls))
+    Ferrite.copy!!(igashell.vtkdata.node_coords, copy(node_coords))
+    Ferrite.copy!!(igashell.vtkdata.cls, copy(cls))
 end
 
 function _init_vtk_cell!(igashell::IGAShell{dim_p,dim_s}, cls, node_coords, cv, bezier_coords::Vector{Vec{dim_s,T}}, node_offset::Int, n_plot_points_dims) where {dim_p,dim_s,T}
@@ -97,7 +97,7 @@ function _init_vtk_cell!(igashell::IGAShell{dim_p,dim_s}, cls, node_coords, cv, 
             end
 
             #Shell layer
-            VTK_CELL = (dim_s==2) ? JuAFEM.VTKCellTypes.VTK_QUAD : JuAFEM.VTKCellTypes.VTK_HEXAHEDRON
+            VTK_CELL = (dim_s==2) ? Ferrite.VTKCellTypes.VTK_QUAD : Ferrite.VTKCellTypes.VTK_HEXAHEDRON
             nodeids = (dim_s==2) ? nodeids[[1,2,4,3]] : nodeids[[1,2,4,3,5,6,8,7]]
             push!(cls, MeshCell(VTK_CELL, nodeids .+ node_offset .+ (ilay-1)*n_plot_points))
 
@@ -115,7 +115,7 @@ function _init_vtk_cell!(igashell::IGAShell{dim_p,dim_s}, cls, node_coords, cv, 
                 end
 
                 #Cohesive
-                VTK_CELL = (dim_s==2) ? JuAFEM.VTKCellTypes.VTK_QUAD : JuAFEM.VTKCellTypes.VTK_HEXAHEDRON
+                VTK_CELL = (dim_s==2) ? Ferrite.VTKCellTypes.VTK_QUAD : Ferrite.VTKCellTypes.VTK_HEXAHEDRON
                 localids = (dim_s==2) ? [3,4] : [5,6,8,7]
                 nodeids = vcat(nodeids[localids], nodeids[localids] .+ n_plot_points_inp*(n_plot_points_oop-1))
                 
@@ -133,32 +133,32 @@ end
 Calculates the dispalcements at the nodes of the underlying FE-mesh 
 
 """
-function Five.get_vtk_displacements(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, state::StateVariables) where {dim_p,dim_s,T}
+function Five.get_vtk_displacements(dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, state::StateVariables) where {dim_p,dim_s,T}
 
 
     node_coords = Vec{dim_s,T}[]
     cls = MeshCell[]
     node_offset = 0
-    nodes = zeros(Int, JuAFEM.nnodes_per_cell(igashell))
-    X = zeros(Vec{dim_s,T}, JuAFEM.nnodes_per_cell(igashell))
+    nodes = zeros(Int, Ferrite.nnodes_per_cell(igashell))
+    X = zeros(Vec{dim_s,T}, Ferrite.nnodes_per_cell(igashell))
     Xᵇ = similar(X)
     cv_plot = vtkdata(igashell).cell_values_plot
     node_disps = Vec{dim_s,T}[]
-    celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh,1))
+    celldofs = zeros(Int, Ferrite.ndofs_per_cell(dh,1))
     for (ic, cellid) in enumerate(igashell.cellset)
         
         Ce = get_extraction_operator(intdata(igashell), ic)
         
-        JuAFEM.cellcoords!(X, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
         Xᵇ .= IGA.compute_bezier_points(Ce, X)
 
         IGA.set_bezier_operator!(cv_plot, Ce)
         reinit!(cv_plot, Xᵇ)
 
         #Get displacement for this cell
-        ndofs = JuAFEM.ndofs_per_cell(dh,cellid)
+        ndofs = Ferrite.ndofs_per_cell(dh,cellid)
         resize!(celldofs, ndofs)
-        JuAFEM.celldofs!(celldofs, dh, cellid)
+        Ferrite.celldofs!(celldofs, dh, cellid)
         ue = state.d[celldofs]
 
         #Transform displayements to fully discontinuous state
@@ -215,7 +215,7 @@ function Five.get_vtk_celldata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKCel
         cellstate = getcellstate(adapdata(igashell), ic)
         for ilay in 1:nlayers(igashell)
             for vtkcell in nvtkcells_per_layer(vtkdata(igashell))
-                cellnodes = zeros(Int, JuAFEM.nnodes_per_cell(igashell, ic))
+                cellnodes = zeros(Int, Ferrite.nnodes_per_cell(igashell, ic))
                 cellconectivity = cellconectivity!(cellnodes, igashell, ic)
                 tmp_cellstate = get_controlpoint_state(adapdata(igashell), cellconectivity[1])
                 for (i, nodeid) in enumerate(cellconectivity[2:end])

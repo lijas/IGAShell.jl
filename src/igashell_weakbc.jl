@@ -24,7 +24,7 @@ function IGAShellWeakBC(;
     return IGAShellWeakBC{typeof(igashell)}(collect(set), func, collect(comps), Base.RefValue(igashell), penalty)
 end
 
-function Five.init_external_force!(a::IGAShellWeakBC, ::JuAFEM.AbstractDofHandler)
+function Five.init_external_force!(a::IGAShellWeakBC, ::Ferrite.AbstractDofHandler)
     return a
 end
 
@@ -34,10 +34,10 @@ function Five.apply_external_force!(wb::IGAShellWeakBC, state::StateVariables{T}
     #Igashell extract
     dh = globaldata.dh
     igashell = wb.igashell[]
-    dim_s = JuAFEM.getdim(igashell)
+    dim_s = Ferrite.getdim(igashell)
 
     #Coords
-    ncoords = JuAFEM.nnodes_per_cell(igashell)
+    ncoords = Ferrite.nnodes_per_cell(igashell)
     X = zeros(Vec{dim_s,T}, ncoords)
     Xᵇ = zeros(Vec{dim_s,T}, ncoords)
     
@@ -56,8 +56,8 @@ function Five.apply_external_force!(wb::IGAShellWeakBC, state::StateVariables{T}
         Ce = get_extraction_operator(intdata(igashell), local_cellid)
         
         #Get coords and dofs of cell
-        JuAFEM.cellcoords!(X, dh, cellid)
-        JuAFEM.celldofs!(celldofs, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
+        Ferrite.celldofs!(celldofs, dh, cellid)
         Xᵇ .= IGA.compute_bezier_points(Ce, X)
 
         ue = state.d[celldofs]

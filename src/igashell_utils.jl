@@ -104,12 +104,12 @@ function generate_out_of_plane_extraction_operators(_knot_vector::Vector{T}, ord
 end
 
 geometryobject(ip::Interpolation, indx::Int) = collect(1:getnbasefunctions(ip))
-geometryobject(ip::Interpolation{2}, indx::FaceIndex) = 1:getnbasefunctions(ip)#JuAFEM.faces(ip)[indx[2]]
-geometryobject(ip::Interpolation, indx::EdgeIndex) = JuAFEM.edges(ip)[indx[2]]
-geometryobject(ip::Interpolation{1}, indx::VertexIndex) = JuAFEM.vertices(ip)[indx[2]]
-geometryobject(ip::Interpolation{2}, indx::EdgeIndex) = JuAFEM.faces(ip)[indx[2]]
-geometryobject(ip::Interpolation{2}, indx::EdgeInterfaceIndex) = JuAFEM.faces(ip)[indx[2]]
-geometryobject(ip::Interpolation{2}, indx::VertexInterfaceIndex) = JuAFEM.vertices(ip)[indx[2]]
+geometryobject(ip::Interpolation{2}, indx::FaceIndex) = 1:getnbasefunctions(ip)#Ferrite.faces(ip)[indx[2]]
+geometryobject(ip::Interpolation, indx::EdgeIndex) = Ferrite.edges(ip)[indx[2]]
+geometryobject(ip::Interpolation{1}, indx::VertexIndex) = Ferrite.vertices(ip)[indx[2]]
+geometryobject(ip::Interpolation{2}, indx::EdgeIndex) = Ferrite.faces(ip)[indx[2]]
+geometryobject(ip::Interpolation{2}, indx::EdgeInterfaceIndex) = Ferrite.faces(ip)[indx[2]]
+geometryobject(ip::Interpolation{2}, indx::VertexInterfaceIndex) = Ferrite.vertices(ip)[indx[2]]
 
 function active_basefunctions(field_dim::Int, indx::FaceIndex)
     indx[2] == 1 && return 1
@@ -136,7 +136,7 @@ function active_basefunctions(field_dim::Int, ::Int)
 end
 
 
-#igashelldofs(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, index::GeometryObject) = celldofs(dh, index[1])[igashelldofs(igashell, index)]
+#igashelldofs(dh::Ferrite.AbstractDofHandler, igashell::IGAShell, index::GeometryObject) = celldofs(dh, index[1])[igashelldofs(igashell, index)]
 
 function igashelldofs(igashell::IGAShell{dim_p,dim_s}, index::GeometryObject, components::Vector{Int}=collect(1:dim_s)) where {dim_p,dim_s}
 
@@ -187,9 +187,9 @@ function vertex_converter(igashell::IGAShell{2,3}, v::Int)
         return 1
     elseif v == igashell.layerdata.orders[1]+1
         return 2
-    elseif v == JuAFEM.nnodes_per_cell(igashell)
+    elseif v == Ferrite.nnodes_per_cell(igashell)
         return 3
-    elseif v == JuAFEM.nnodes_per_cell(igashell)-igashell.layerdata.orders[1]
+    elseif v == Ferrite.nnodes_per_cell(igashell)-igashell.layerdata.orders[1]
         return 4
     else
         error("Bad vertex")
@@ -199,7 +199,7 @@ end
 function vertex_converter(igashell::IGAShell{1,2}, v::Int)
     if v == 1
         return 1
-    elseif v == JuAFEM.nnodes_per_cell(igashell)
+    elseif v == Ferrite.nnodes_per_cell(igashell)
         return 2
     else
         error("Bad vertex")

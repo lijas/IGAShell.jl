@@ -396,15 +396,15 @@ function IGAShellData(;
 end
 
 nlayers(data::IGAShellData) = data.nlayers
-JuAFEM.getncells(data::IGAShellData) = length(data.initial_cellstates)
+Ferrite.getncells(data::IGAShellData) = length(data.initial_cellstates)
 ninterfaces(data::IGAShellData) = nlayers(data)-1
 is_small_deformation_theory(data::IGAShellData) = data.small_deformations_theory
 
-JuAFEM.nnodes_per_cell(data::IGAShellData{dim_p}) where {dim_p} = prod(data.orders[1:dim_p].+1)::Int
+Ferrite.nnodes_per_cell(data::IGAShellData{dim_p}) where {dim_p} = prod(data.orders[1:dim_p].+1)::Int
 getmidsurface_ip(data::IGAShellData{dim_p,dim_s}) where {dim_p, dim_s} = IGA.BernsteinBasis{dim_p,data.orders[1:dim_p]}()
 ooplane_order(data::IGAShellData{dim_p,dim_s}) where {dim_p,dim_s} = data.orders[dim_s]
 
-JuAFEM.getnquadpoints(data::IGAShellData{dim_p}) where dim_p = data.nqp_inplane_order^dim_p * data.nqp_ooplane_per_layer * data.nlayers
+Ferrite.getnquadpoints(data::IGAShellData{dim_p}) where dim_p = data.nqp_inplane_order^dim_p * data.nqp_ooplane_per_layer * data.nlayers
 getnquadpoints_ooplane(data::IGAShellData) = data.nqp_ooplane_per_layer * data.nlayers
 
 getmaterial(data::IGAShellData) = return data.layer_materials
