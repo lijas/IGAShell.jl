@@ -1,23 +1,20 @@
-function calculate_element_volume(cell_values::IgAShell.IGAShellValues, nlayers::Int)
-    qp = 0
+function calculate_element_volume(cv::IgAShell.IGAShellValues)
     V = 0
-    for ilay in 1:nlayers
-        #IgAShell.reinit_layer!(cell_values, ilay)
-        for qp in 1:IgAShell.getnquadpoints(cell_values)
-            V += getdetJdV(cell_values, qp)
-        end
+
+    for qp in 1:IgAShell.getnquadpoints(cv)
+        V += getdetJdV(cv, qp)
     end
+
     return V
 end
 
-function calculate_element_area(cell_values::IgAShell.IGAShellValues, INDEX, nlayers::Int)
+function calculate_element_area(cv::IgAShell.IGAShellValues, INDEX)
     A = 0
-    for ilay in 1:nlayers
-        #IgAShell.reinit_layer!(cell_values, ilay)
-        for qp in 1:IgAShell.getnquadpoints(cell_values)
-            A += IgAShell.getdetJdA(cell_values, qp, INDEX)
-        end
+
+    for qp in 1:IgAShell.getnquadpoints(cv)
+        A += IgAShell.getdetJdA(cv, qp, INDEX)
     end
+
     return A
 end
 
@@ -68,12 +65,12 @@ function get_curved_mesh(cellstate; h, b, R)
     interface_damage = [0.0 for _ in 1:ninterfaces, _ in 1:nelx*nely]
     
     #Material
-    interfacematerial = MatCZBilinear(
-        K    = 1.0e5,
-        Gᴵ   = (0.5, 0.5, 0.5),
-        τᴹᵃˣ = (50.0, 50.0, 50.0),
-        η    = 1.6
-    ) 
+    interfacematerial = Five.MatCZKolluri(
+        σₘₐₓ = 60 * 0.5,
+        τₘₐₓ = 90 * 0.5,
+        Φₙ = 211.0/1000,
+        Φₜ = 1050.0/1000
+    )
     layermats = [MatLinearElastic(E=E, nu=ν) for i in 1:nlayers]
     
     #IGAshell
@@ -89,11 +86,16 @@ function get_curved_mesh(cellstate; h, b, R)
         #initial_interface_damages          = interface_damage,
         width                     = dim == 2 ? b : 1.0,
         adaptable                 = false,
+            limit_stress_criterion   = 100.993,
+            limit_damage_criterion   = 0.01,
+            search_radius            = 10.0,
+            locked_elements          = Int[],
         small_deformations_theory = true,
         nqp_inplane_order         = 4,
         nqp_ooplane_per_layer     = 4,
         nqp_interface_order       = 2,
     ) 
+
     igashell = IgAShell.IGAShell(
         cellset = collect(1:getncells(grid)), 
         connectivity = reverse(nurbsmesh.IEN, dims=1), 
@@ -171,7 +173,7 @@ end
 
         cv = get_and_reinit_cv(igashell, grid, cellid)
 
-        V += calculate_element_volume(cv, IgAShell.nlayers(igashell))
+        V += calculate_element_volume(cv)
     end
     @test isapprox(V, pi/2 * R * b * h, atol=1e-3)
 
@@ -181,7 +183,7 @@ end
         cellid, edgeid, interface = edge
         cv = get_and_reinit_fv(igashell, grid, edge)
 
-        L += calculate_element_area(cv, edge, IgAShell.nlayers(igashell))
+        L += calculate_element_area(cv, edge)
     end
     @test L ≈ b
 
@@ -191,7 +193,7 @@ end
         cellid, edgeid, interface = edge
         cv = get_and_reinit_fv(igashell, grid, edge)
 
-        L += calculate_element_area(cv, edge, IgAShell.nlayers(igashell))
+        L += calculate_element_area(cv, edge)
     end
     @test L ≈ b
 
@@ -201,7 +203,7 @@ end
         cellid, edgeid, interface = edge
         cv = get_and_reinit_fv(igashell, grid, edge)
 
-        L += calculate_element_area(cv, edge, IgAShell.nlayers(igashell))
+        L += calculate_element_area(cv, edge)
     end
     @test isapprox(L, (R+h/2)*pi/2, atol=1e-3)
     
@@ -212,7 +214,7 @@ end
         cellid, edgeid, interface = edge
         cv = get_and_reinit_fv(igashell, grid, edge)
 
-        L += calculate_element_area(cv, edge, IgAShell.nlayers(igashell))
+        L += calculate_element_area(cv, edge)
     end
     @test isapprox(L, (R-h/2)*pi/2, atol=1e-3)
 
@@ -222,7 +224,7 @@ end
         cellid, edgeid = edge
         cv = get_and_reinit_fv(igashell, grid, edge)
 
-        A  += calculate_element_area(cv,edge, IgAShell.nlayers(igashell))
+        A  += calculate_element_area(cv,edge)
     end
     @test A ≈ h*b
 
@@ -232,7 +234,7 @@ end
         cellid, edgeid = edge
         cv = get_and_reinit_fv(igashell, grid, edge)
 
-        A  += calculate_element_area(cv, edge, IgAShell.nlayers(igashell))
+        A  += calculate_element_area(cv, edge)
     end
     @test A ≈ h*b
 
@@ -242,7 +244,7 @@ end
         cellid, edgeid = edge
         cv = get_and_reinit_fv(igashell, grid, edge)
 
-        A  += calculate_element_area(cv, edge, IgAShell.nlayers(igashell))
+        A  += calculate_element_area(cv, edge)
     end
     @test isapprox(A, R*pi/2 * h, atol=1e-3)
 
@@ -396,7 +398,7 @@ end
 #    grid, igashell = get_cube_mesh(IgAShell.LUMPED, h=0.1, b=1.0, L = 10.0)
     h = 0.2
     grid, igashell = get_curved_mesh(IgAShell.LAYERED, h=h, b=.556, R=4.22)
-    dim = JuAFEM.getdim(igashell)
+    dim = Ferrite.getdim(igashell)
 
     for cellid in 1:1#getncells(igashell)
         cellstate = IgAShell.getcellstate(IgAShell.adapdata(igashell), cellid)
