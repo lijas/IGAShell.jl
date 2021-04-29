@@ -57,9 +57,10 @@ function get_curved_mesh(cellstate; h, b, R)
     ninterfaces = nlayers-1
     
     nelx = 100; nely = 1
-    nurbsmesh = IgAShell.IgAShell.IGA.generate_curved_nurbsmesh((nelx,nely), orders, pi/2, R, b, multiplicity=(1,1))
-    grid = IgAShell.IgAShell.IGA.convert_to_grid_representation(nurbsmesh)
-    
+    #nurbsmesh = IgAShell.IgAShell.IGA.generate_curved_nurbsmesh((nelx,nely), orders, pi/2, R, b, multiplicity=(1,1))
+    nurbsmesh = IgAShell.IGA.generate_nurbs_patch(:singly_curved_shell, (nelx,nely), orders; α=pi/2, R=R, width=b) 
+    grid = Grid(nurbsmesh)
+
     cellstates = [cellstate for i in 1:nelx*nely]
 
     interface_damage = [0.0 for _ in 1:ninterfaces, _ in 1:nelx*nely]
@@ -322,12 +323,8 @@ end
     @test all( isapprox.(κ, 1/R, atol=1e-2) )
 
 
-    # # #
-    # TEST LOCAL DOF GETTER
-    # # #
-
-    @test IgAShell.igashelldofs(igashell, first(frontedgebot)) == [1, 2, 3, 31, 32, 33, 61, 62, 63, 91, 92, 93]
-
+    #
+    
 end
 
 @testset "igashell utils" begin
