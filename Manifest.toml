@@ -133,10 +133,8 @@ uuid = "f6369f11-7733-5829-9624-2563aa707210"
 version = "0.10.18"
 
 [[IGA]]
-deps = ["Ferrite", "LinearAlgebra", "Reexport", "SparseArrays", "StaticArrays", "Tensors", "TimerOutputs", "WriteVTK"]
-git-tree-sha1 = "697af3cd8b8c9391656125faccd75292978172db"
-repo-rev = "eliasfem"
-repo-url = "https://github.com/lijas/IGA.jl.git"
+deps = ["Ferrite", "LinearAlgebra", "Reexport", "SparseArrays", "StaticArrays", "Tensors", "WriteVTK"]
+path = "/home/elias/.julia/dev/IGA"
 uuid = "e7b8d123-e02a-40ba-ad18-d3943ed54f1c"
 version = "0.1.0"
 
