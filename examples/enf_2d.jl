@@ -121,7 +121,7 @@ etf = IGAShellWeakBC(
 push!(data.constraints, etf)
 
 #Force
-midvertex = collect(getvertexset(data.grid, "mid"))[1]
+midvertex = collect(getvertexset(data.grid, "mid"))[2]
 edgeset = VertexInterfaceIndex([midvertex], 2)
 etf = IGAShellExternalForce(
     set = edgeset, 
@@ -182,7 +182,7 @@ state, globaldata = build_problem(data) do dh, parts, dbc
     Five.update_dofhandler!(dh, StateVariables(Float64, ndofs(dh)), instructions)
     
     alldofs = collect(1:ndofs(dh))
-    JuAFEM.copy!!(dbc.free_dofs, alldofs)
+    Ferrite.copy!!(dbc.free_dofs, alldofs)
 end
 
 solver = LocalDissipationSolver(
