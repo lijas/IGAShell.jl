@@ -372,7 +372,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
         Xᵇ .= IGA.compute_bezier_points(Ce, X)
         @timeit "reinit1" reinit!(cv, Xᵇ)
 
-        ⁿmaterialstates = state.prev_partstates[ic].materialstates
         materialstates = state.partstates[ic].materialstates
 
         for ilay in 1:nlayers(igashell)
@@ -384,7 +383,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
             fe = zeros(T, ndofs_layer)
             ke = zeros(T, ndofs_layer, ndofs_layer)
 
-            ⁿstates =  @view ⁿmaterialstates[:, ilay]
             states = @view materialstates[:, ilay]
 
             if assemtype == IGASHELL_STIFFMAT
@@ -397,11 +395,12 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                 
                 assemble!(assembler, celldofs[active_dofs], ke, fe)
             elseif assemtype == IGASHELL_FSTAR
-
+                ⁿmaterialstates = state.prev_partstates[ic].materialstates
+                ⁿstates =  @view ⁿmaterialstates[:, ilay]
                 @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
                                         cv, 
                                         ke, fe, 
-                                        getmaterial(layerdata(igashell)), states, 
+                                        getmaterial(layerdata(igashell)), ⁿstates, 
                                         ue_layer, ilay, nlayers(igashell), active_dofs, 
                                         is_small_deformation_theory(layerdata(igashell)), IGASHELL_FSTAR, getwidth(layerdata(igashell)))
 
