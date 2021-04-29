@@ -264,7 +264,7 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
         
         #Calculate and extract gradients for stress recovory equations
         σ = function_value(cvᴸ, 1, σ_states, range)
-        ∇σ = JuAFEM.function_derivative(cvᴸ, 1, σ_states, range)
+        ∇σ = Ferrite.function_derivative(cvᴸ, 1, σ_states, range)
         ∇∇σ = function_second_derivative(cvᴸ, 1, σ_states, range)
         ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(∇σ, ∇∇σ)
         

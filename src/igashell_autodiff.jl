@@ -5,7 +5,7 @@ function _calculate_X₀(msip::Interpolation, coords::Vector{Vec{dim_s,T2}}, ξ:
 
     x = zero(Vec{dim_s,T})
     for i in 1:getnbasefunctions(msip)
-        N = JuAFEM.value(msip,i,ξ2)
+        N = Ferrite.value(msip,i,ξ2)
         x += N * coords[i]
     end
     return x
@@ -56,12 +56,12 @@ function _calculate_u(ip::Tuple{Interpolation, Vector{Interpolation}, IGA.Bezier
     ζ = Vec((ξ[dim_s]))
 
     N = T2[]
-    B = [JuAFEM.value(msip, i, ξ2) for i in 1:getnbasefunctions(msip)]
+    B = [Ferrite.value(msip, i, ξ2) for i in 1:getnbasefunctions(msip)]
 
     for i in 1:getnbasefunctions(msip)
         S = sum(Ce[i] .* B)
         for j in 1:getnbasefunctions(opip[i])
-            H = JuAFEM.value(opip[i], j, ζ)
+            H = Ferrite.value(opip[i], j, ζ)
             push!(N, S*H)
         end
     end
@@ -86,7 +86,7 @@ function _calculate_u(ip::Interpolation, ue::AbstractVector{T}, ξ::Vec{dim_s,T2
 
     count = 1
     for i in 1:getnbasefunctions(ip)
-        N = JuAFEM.value(ip, i, ξ2)
+        N = Ferrite.value(ip, i, ξ2)
         for d in 1:dim_s
             u += N * ue[count] * eᵢ(Vec{dim_s, Float64}, d)
             count += 1

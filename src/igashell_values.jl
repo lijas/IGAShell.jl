@@ -4,8 +4,8 @@ struct BasisValues{dim,T,M}
     dNdξ::Matrix{Vec{dim,T}}
     d²Ndξ²::Matrix{Tensor{2,dim,T,M}}
 end
-JuAFEM.getnquadpoints(b::BasisValues) = size(b.N,2)
-JuAFEM.getnbasefunctions(b::BasisValues) = size(b.N,1)
+Ferrite.getnquadpoints(b::BasisValues) = size(b.N,2)
+Ferrite.getnbasefunctions(b::BasisValues) = size(b.N,1)
 
 function BasisValues{dim,T}() where {dim,T}
     d²Ndξ² = Matrix{Tensor{2,dim,T}}(undef,0,0)
@@ -20,14 +20,14 @@ function BasisValues(quad_rule::QuadratureRule{dim,RefCube,T}, ip::Interpolation
     d²Ndξ² = fill(zero(Tensor{2,dim,T}) * T(NaN), getnbasefunctions(ip), nqp)
     for (qp, ξ) in enumerate(quad_rule.points)
         for i in 1:getnbasefunctions(ip)
-            d²Ndξ²[i, qp], dNdξ[i, qp], N[i, qp] = hessian(ξ -> JuAFEM.value(ip, i, ξ), ξ, :all)
+            d²Ndξ²[i, qp], dNdξ[i, qp], N[i, qp] = hessian(ξ -> Ferrite.value(ip, i, ξ), ξ, :all)
         end
     end
     M = Tensors.n_components(Tensors.get_base(eltype(d²Ndξ²)))
     return BasisValues{dim,T,M}(N,dNdξ,d²Ndξ²)
 end
 
-function JuAFEM.function_value(fe_v::BasisValues{dim_p}, q_point::Int, u::AbstractVector{T2}, dof_order::AbstractVector{Int} = collect(1:length(u))) where {dim_p,T2}
+function Ferrite.function_value(fe_v::BasisValues{dim_p}, q_point::Int, u::AbstractVector{T2}, dof_order::AbstractVector{Int} = collect(1:length(u))) where {dim_p,T2}
     n_base_funcs = getnbasefunctions(fe_v)
     @assert length(dof_order) == n_base_funcs
     @boundscheck checkbounds(u, dof_order)
@@ -38,7 +38,7 @@ function JuAFEM.function_value(fe_v::BasisValues{dim_p}, q_point::Int, u::Abstra
     return val 
 end
 
-function JuAFEM.function_derivative(fe_v::BasisValues{dim_p}, q_point::Int, u::AbstractVector{T2}, dof_order::AbstractVector{Int} = collect(1:length(u))) where {dim_p,T2}
+function Ferrite.function_derivative(fe_v::BasisValues{dim_p}, q_point::Int, u::AbstractVector{T2}, dof_order::AbstractVector{Int} = collect(1:length(u))) where {dim_p,T2}
     n_base_funcs = getnbasefunctions(fe_v)
     @assert length(dof_order) == n_base_funcs
     @boundscheck checkbounds(u, dof_order)
@@ -133,13 +133,13 @@ end
 
 getnquadpoints_ooplane(cv::IGAShellValues) = return length(cv.oqr.weights)
 getnquadpoints_inplane(cv::IGAShellValues) = return length(cv.iqr.weights)
-JuAFEM.getnquadpoints(cv::IGAShellValues) = return getnquadpoints_ooplane(cv)*getnquadpoints_inplane(cv)
+Ferrite.getnquadpoints(cv::IGAShellValues) = return getnquadpoints_ooplane(cv)*getnquadpoints_inplane(cv)
 
 getnbasefunctions_inplane(cv::IGAShellValues) = return size(cv.inplane_values_bezier.N, 1)
 getnbasefunctions_ooplane(cv::IGAShellValues, i::Int) = return getnbasefunctions(cv.H[i])
-JuAFEM.getnbasefunctions(cv::IGAShellValues) = return cv.nbasisfunctions[]
+Ferrite.getnbasefunctions(cv::IGAShellValues) = return cv.nbasisfunctions[]
 
-JuAFEM.getdetJdV(cv::IGAShellValues, qp::Int) = cv.detJdV[qp]
+Ferrite.getdetJdV(cv::IGAShellValues, qp::Int) = cv.detJdV[qp]
 
 function getdetJdA(cv::IGAShellValues, qp::Int, idx::EdgeIndex)
     _,edgeid = idx
@@ -414,7 +414,7 @@ function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords
 
 end
 
-function JuAFEM.reinit!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
+function Ferrite.reinit!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
 
     qp = 0
     for iqp in 1:getnquadpoints_inplane(cv)
@@ -472,7 +472,7 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
 
     n_midplane_basefuncs = getnbasefunctions(mid_ip)
     dim_s = dim_p+1
-    @assert JuAFEM.getdim(mid_ip) == dim_p
+    @assert Ferrite.getdim(mid_ip) == dim_p
 
     # Function interpolation
     inplane_values_bezier = BasisValues(qr_inplane, mid_ip)
@@ -528,7 +528,7 @@ function function_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, 
     return grad
 end
 
-function JuAFEM.function_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{T}, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}
+function Ferrite.function_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{T}, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}
     val = zero(Vec{dim_s,T})
     @assert(length(ue) == length(active_dofs))
     @inbounds for (i,j) in enumerate(active_dofs)
@@ -537,7 +537,7 @@ function JuAFEM.function_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::A
     return val
 end
 
-function JuAFEM.shape_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{Vec{dim_s,T}}, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}
+function Ferrite.shape_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{Vec{dim_s,T}}, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}
     val = zero(Vec{dim_s,T})
     @assert(length(ue) == length(active_dofs))
     @inbounds for (i,j) in enumerate(active_dofs)
@@ -566,7 +566,7 @@ function shape_parent_second_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::I
     return grad
 end
 
-function JuAFEM.spatial_coordinate(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, x::AbstractVector{Vec{dim_s,T}}) where {dim_s,dim_p,T}
+function Ferrite.spatial_coordinate(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, x::AbstractVector{Vec{dim_s,T}}) where {dim_s,dim_p,T}
     i2s = CartesianIndices((getnquadpoints_inplane(cv), getnquadpoints_ooplane(cv)))
     iqp, oqp = Tuple(i2s[qp])
     D = cv.Eₐ[iqp][dim_s]

@@ -19,7 +19,7 @@ function IGAShellExternalForce(;
     return IGAShellExternalForce{typeof(igashell)}(collect(set), func, Base.RefValue(igashell))
 end
 
-function Five.init_external_force!(a::IGAShellExternalForce, ::JuAFEM.AbstractDofHandler)
+function Five.init_external_force!(a::IGAShellExternalForce, ::Ferrite.AbstractDofHandler)
     return a
 end
 
@@ -28,10 +28,10 @@ function Five.apply_external_force!(ef::IGAShellExternalForce{P}, state::StateVa
     #Igashell extract
     dh = globaldata.dh
     igashell = ef.igashell[]
-    dim_s = JuAFEM.getdim(igashell)
+    dim_s = Ferrite.getdim(igashell)
 
     #Coords
-    ncoords = JuAFEM.nnodes_per_cell(igashell)
+    ncoords = Ferrite.nnodes_per_cell(igashell)
     X = zeros(Vec{dim_s,T}, ncoords)
     Xᵇ = zeros(Vec{dim_s,T}, ncoords)
 
@@ -51,8 +51,8 @@ function Five.apply_external_force!(ef::IGAShellExternalForce{P}, state::StateVa
         ke = zeros(T, ndofs, ndofs)
 
         #Get coords and dofs of cell
-        JuAFEM.cellcoords!(X, dh, cellid)
-        JuAFEM.celldofs!(celldofs, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
+        Ferrite.celldofs!(celldofs, dh, cellid)
 
         #Bezier and cell values
         Ce = get_extraction_operator(intdata(igashell), local_cellid)

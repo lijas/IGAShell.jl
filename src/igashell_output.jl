@@ -22,11 +22,11 @@ function Five.collect_output!(output::IGAShellStressOutput, state::StateVariable
     #Extract some variables
     igashell = output.igashell[]
     dh = globaldata.dh
-    dim_s = JuAFEM.getdim(igashell)
+    dim_s = Ferrite.getdim(igashell)
     small_deformations = is_small_deformation_theory(layerdata(igashell))
 
     #pre-allocate variables
-    nnodes = JuAFEM.nnodes_per_cell(igashell)
+    nnodes = Ferrite.nnodes_per_cell(igashell)
     X = zeros(Vec{dim_s,T}, nnodes)
 
     #Variables related to number of gausspoints
@@ -53,7 +53,7 @@ function Five.collect_output!(output::IGAShellStressOutput, state::StateVariable
         ue = state.d[celldofs]
         
         #Coords of cell
-        JuAFEM.cellcoords!(X, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
         Xᵇ = IGA.compute_bezier_points(Ce, X)
 
         #Shape values for evaluating stresses at center of cell
@@ -152,10 +152,10 @@ function Five.collect_output!(output::IGAShellRecovoredStressOutput, state::Stat
     #Extract some variables
     igashell = output.igashell[]
     dh = globaldata.dh
-    dim_s = JuAFEM.getdim(igashell)
+    dim_s = Ferrite.getdim(igashell)
 
     #pre-allocate variables
-    nnodes = JuAFEM.nnodes_per_cell(igashell)
+    nnodes = Ferrite.nnodes_per_cell(igashell)
     X = zeros(Vec{dim_s,T}, nnodes)
 
     cv_sr = intdata(igashell).cell_values_sr
@@ -196,9 +196,9 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
     
     dh = globaldata.dh 
     igashell = output.igashell[]
-    dim_s = JuAFEM.getdim(igashell)
+    dim_s = Ferrite.getdim(igashell)
 
-    nnodes = JuAFEM.nnodes_per_cell(igashell)
+    nnodes = Ferrite.nnodes_per_cell(igashell)
     X = zeros(Vec{dim_s,T}, nnodes)
 
     alldofs = Int[]
@@ -208,8 +208,8 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
         cellid = faceidx[1]
         local_cellid = findfirst((i)->i==cellid, igashell.cellset)
         
-        _celldofs = zeros(Int, JuAFEM.ndofs_per_cell(dh, cellid))
-        JuAFEM.celldofs!(_celldofs, dh, cellid)
+        _celldofs = zeros(Int, Ferrite.ndofs_per_cell(dh, cellid))
+        Ferrite.celldofs!(_celldofs, dh, cellid)
         ue = state.d[_celldofs]
 
         #
@@ -223,7 +223,7 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
         #
         # This approach works generally. Se what basefunctions are non-zero, and take the corresponding dofs
         Ce = get_extraction_operator(intdata(igashell), local_cellid)
-        JuAFEM.cellcoords!(X, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
         Xᵇ = IGA.compute_bezier_points(Ce, X)
 
         cv = build_facevalue!(igashell, faceidx)

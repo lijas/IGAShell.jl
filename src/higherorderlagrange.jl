@@ -16,7 +16,7 @@ function generate_1d_lagrange_value(order::Int, i::Int, ξ::Vec{1})
     return _val
 end
 
-function JuAFEM.value(ip::MyLagrange{dim,RefCube,order}, _i::Int, ξ::Vec{dim}) where {dim,order}
+function Ferrite.value(ip::MyLagrange{dim,RefCube,order}, _i::Int, ξ::Vec{dim}) where {dim,order}
 
     orders = ntuple(_-> order, dim)
     i = _lagrange_ordering(ip)[_i]
@@ -29,9 +29,9 @@ function JuAFEM.value(ip::MyLagrange{dim,RefCube,order}, _i::Int, ξ::Vec{dim}) 
     return _val
 end
 
-JuAFEM.getnbasefunctions(::MyLagrange{dim,RefCube,order}) where {dim,order} = (order+1)^dim
-JuAFEM.nvertexdofs(::MyLagrange{dim,RefCube,order}) where {dim,order} = 1
-JuAFEM.faces(::MyLagrange{dim,RefCube,order}) where {dim,order} = error("Not implemented")
+Ferrite.getnbasefunctions(::MyLagrange{dim,RefCube,order}) where {dim,order} = (order+1)^dim
+Ferrite.nvertexdofs(::MyLagrange{dim,RefCube,order}) where {dim,order} = 1
+Ferrite.faces(::MyLagrange{dim,RefCube,order}) where {dim,order} = error("Not implemented")
 
 function _lagrange_ordering(::MyLagrange{1,RefCube,order}) where {order}
     dim = 1
@@ -168,7 +168,7 @@ function _lagrange_ordering(::MyLagrange{3,RefCube,order}) where {order}
     edge = (ci[1,end,2:end-1]) # Reverse?
     append!(ordering, ind[edge])
 
-    #Faces (vtk orders left face first, but juafem orders bottom first)
+    #Faces (vtk orders left face first, but Ferrite orders bottom first)
     #Face, bottom
     face = ci[2:end-1,2:end-1,1][:] #bottom
     append!(ordering, ind[face])
@@ -204,7 +204,7 @@ function tes_mylagrange()
         for order in [1,2]
             ordering = _lagrange_ordering(MyLagrange{dim,RefCube,order}())
             for j in 1:getnbasefunctions(Lagrange{dim,RefCube,order}())
-                val1 = JuAFEM.value(Lagrange{dim,RefCube,order}(), j, qr.points[i])
+                val1 = Ferrite.value(Lagrange{dim,RefCube,order}(), j, qr.points[i])
                 val2 = value(MyLagrange{dim,RefCube,order}(), ordering[j], qr.points[i])
                 @show j, val1 ≈ val2
             end

@@ -32,7 +32,7 @@ srdata(igashell::IGAShell) = igashell.stress_recovory
 cellconectivity!(nodes::Vector{Int}, igashell::IGAShell, cellid::Int) =  nodes .= igashell.cell_connectivity[:, cellid]
 cellconectivity(igashell::IGAShell, cellid::Int) = @view igashell.cell_connectivity[:, cellid]
 
-JuAFEM.getnquadpoints(igashell::IGAShell) = getnquadpoints_per_layer(igashell)*nlayers(igashell)
+Ferrite.getnquadpoints(igashell::IGAShell) = getnquadpoints_per_layer(igashell)*nlayers(igashell)
 getnquadpoints_inplane(igashell::IGAShell) = length(getweights(intdata(igashell).iqr))
 getnquadpoints_ooplane(igashell::IGAShell) = length(getweights(intdata(igashell).oqr))
 getnquadpoints_per_interface(igashell::IGAShell{dim_p}) where {dim_p} = layerdata(igashell).nqp_interface_order^dim_p
@@ -58,10 +58,10 @@ is_adaptive(igashell::IGAShell) = igashell.layerdata.adaptable
 
 getcellstate(igashell::IGAShell, i::Int) = igashell.adaptivity.cellstates[i]
 
-JuAFEM.nnodes_per_cell(igashell::IGAShell{dim_p}, cellid::Int=1) where dim_p = prod(igashell.layerdata.orders[1:dim_p].+1)::Int#getnbasefunctions(igashell.cv_inplane) ÷ dim_p
-JuAFEM.getdim(igashell::IGAShell{dim_p,dim_s}) where {dim_p,dim_s} = dim_s
-JuAFEM.getncells(igashell::IGAShell) = length(igashell.cellset)
-JuAFEM.getnnodes(igashell::IGAShell) = maximum(igashell.cell_connectivity)
+Ferrite.nnodes_per_cell(igashell::IGAShell{dim_p}, cellid::Int=1) where dim_p = prod(igashell.layerdata.orders[1:dim_p].+1)::Int#getnbasefunctions(igashell.cv_inplane) ÷ dim_p
+Ferrite.getdim(igashell::IGAShell{dim_p,dim_s}) where {dim_p,dim_s} = dim_s
+Ferrite.getncells(igashell::IGAShell) = length(igashell.cellset)
+Ferrite.getnnodes(igashell::IGAShell) = maximum(igashell.cell_connectivity)
 
 Five.get_fields(igashell::IGAShell) = [Field(:u, getmidsurface_ip(layerdata(igashell)), ndofs_per_controlpoint(igashell, LUMPED_CPSTATE))]
 
@@ -108,7 +108,7 @@ function IGAShell(;
 
 end
 
-function Five.init_part!(igashell::IGAShell, dh::JuAFEM.AbstractDofHandler)
+function Five.init_part!(igashell::IGAShell, dh::Ferrite.AbstractDofHandler)
     _init_vtk_grid!(dh, igashell)
 end
 
@@ -264,7 +264,7 @@ function build_active_layer_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate::CE
     elseif is_fully_discontiniuos(cellstate)
         return intdata(igashell).cache_values.active_layer_dofs_discont
     else
-        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), dim_s, JuAFEM.nnodes_per_cell(igashell), cellstate)
+        return generate_active_layer_dofs(nlayers(igashell), ooplane_order(layerdata(igashell)), dim_s, Ferrite.nnodes_per_cell(igashell), cellstate)
     end
 
 end
@@ -278,7 +278,7 @@ function build_active_interface_dofs(igashell::IGAShell{dim_p, dim_s}, cellstate
     elseif is_fully_discontiniuos(cellstate)
         return intdata(igashell).cache_values.active_interface_dofs_discont
     else
-        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), dim_s, JuAFEM.nnodes_per_cell(igashell), cellstate)
+        return generate_active_interface_dofs(ninterfaces(igashell), ooplane_order(layerdata(igashell)), dim_s, Ferrite.nnodes_per_cell(igashell), cellstate)
     end
 
 end
@@ -287,7 +287,7 @@ function _build_oop_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cellstate::CE
 
     oop_values = BasisValues{1,T,1}[]
 
-    for i in 1:JuAFEM.nnodes_per_cell(igashell)
+    for i in 1:Ferrite.nnodes_per_cell(igashell)
         cp_state = get_cpstate(cellstate, i)
 
         if faceidx != -1
@@ -308,7 +308,7 @@ function _build_oop_cohesive_basisvalue!(igashell::IGAShell{dim_p,dim_s,T}, cell
     oop_cohesive_top_values = BasisValues{1,T,1}[]
     oop_cohesive_bot_values = BasisValues{1,T,1}[]
 
-    for i = 1:JuAFEM.nnodes_per_cell(igashell)
+    for i = 1:Ferrite.nnodes_per_cell(igashell)
         cp_state = get_cpstate(cellstate, i)
         
         cached_bottom_values, cached_top_values = cached_cohesive_basisvalues(intdata(igashell), cp_state)
@@ -323,27 +323,27 @@ end
 
 @enum IGASHELL_ASSEMBLETYPE IGASHELL_FORCEVEC IGASHELL_STIFFMAT IGASHELL_FSTAR IGASHELL_DISSIPATION
 
-function Five.assemble_fstar!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
+function Five.assemble_fstar!(dh::Ferrite.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_FSTAR)
 end
 
-function Five.assemble_dissipation!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
+function Five.assemble_dissipation!(dh::Ferrite.AbstractDofHandler, igashell::IGAShell, state::StateVariables)
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_DISSIPATION)
 end
 
 
-function Five.assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell, state::StateVariables) 
+function Five.assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHandler, igashell::IGAShell, state::StateVariables) 
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_STIFFMAT)
 end
 
-function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandler, 
+function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHandler, 
                                                      igashell::IGAShell{dim_p,dim_s,T},  
                                                      state::StateVariables, 
                                                      assemtype::IGASHELL_ASSEMBLETYPE) where {dim_p,dim_s,T}
 
     assembler = start_assemble(state.system_arrays.Kⁱ, state.system_arrays.fⁱ, fillzero=false)  
 
-    nnodes = JuAFEM.nnodes_per_cell(igashell)
+    nnodes = Ferrite.nnodes_per_cell(igashell)
     X = zeros(Vec{dim_s,T}, nnodes)
     Xᵇ = similar(X)
     celldofs = zeros(Int, nnodes)
@@ -361,11 +361,11 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         Ce = get_extraction_operator(intdata(igashell), ic)
         IGA.set_bezier_operator!(cv, Ce)
 
-        ndofs = JuAFEM.ndofs_per_cell(dh, cellid)
+        ndofs = Ferrite.ndofs_per_cell(dh, cellid)
         resize!(celldofs, ndofs)
 
-        JuAFEM.cellcoords!(X, dh, cellid)
-        JuAFEM.celldofs!(celldofs, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
+        Ferrite.celldofs!(celldofs, dh, cellid)
         
         ue = state.d[celldofs]
 
@@ -442,11 +442,11 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
 
         interfacestates = state.partstates[ic].interfacestates
 
-        ndofs = JuAFEM.ndofs_per_cell(dh,cellid)
+        ndofs = Ferrite.ndofs_per_cell(dh,cellid)
         resize!(celldofs, ndofs)
 
-        JuAFEM.cellcoords!(X, dh, cellid)
-        JuAFEM.celldofs!(celldofs, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
+        Ferrite.celldofs!(celldofs, dh, cellid)
         
         Ce = get_extraction_operator(intdata(igashell), ic)
 
@@ -454,7 +454,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
         
         for iint in 1:ninterfaces(igashell)      
 
-            active_dofs = 1:JuAFEM.ndofs_per_cell(dh,ic)# active_interface_dofs[iint]
+            active_dofs = 1:Ferrite.ndofs_per_cell(dh,ic)# active_interface_dofs[iint]
             
             if !is_interface_active(cellstate, iint)
                 continue
@@ -543,7 +543,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::JuAFEM.AbstractDofHandl
 
 end
 
-function assemble_massmatrix!( dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, system_arrays::SystemArrays) where {dim_p,dim_s,T}
+function assemble_massmatrix!( dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, system_arrays::SystemArrays) where {dim_p,dim_s,T}
 
 
 end
@@ -571,9 +571,9 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         _celldofs = celldofs(dh, cellid)
         ue = states.d[_celldofs]
 
-        nnodes = JuAFEM.nnodes_per_cell(igashell)
+        nnodes = Ferrite.nnodes_per_cell(igashell)
         X = zeros(Vec{dim_s,T}, nnodes)
-        JuAFEM.cellcoords!(X, dh, cellid)
+        Ferrite.cellcoords!(X, dh, cellid)
         Xᵇ= IGA.compute_bezier_points(Ce, X)
         celldata = (celldofs = _celldofs, 
                     Xᵇ=Xᵇ, X=X, ue=ue, 
@@ -990,11 +990,11 @@ function _cohesvive_rotation_matrix!(cv_top::IGAShellValues{dim_s,dim_p,T},
     return R, dV
 end
 
-function Five.get_vtk_grid(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}) where {dim_p,dim_s,T}
+function Five.get_vtk_grid(dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}) where {dim_p,dim_s,T}
     return igashell.vtkdata.cls, igashell.vtkdata.node_coords
 end
 
-function Five.commit_part!(dh::JuAFEM.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s}, state::StateVariables) where {dim_p,dim_s}
+function Five.commit_part!(dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s}, state::StateVariables) where {dim_p,dim_s}
     
     if !is_adaptive(igashell)
         return FieldDimUpgradeInstruction[]

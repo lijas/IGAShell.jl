@@ -220,7 +220,7 @@ state, globaldata = build_problem(data) do dh, parts, dbc
     Five.update_dofhandler!(dh, StateVariables(Float64, ndofs(dh)), instructions)
     
     alldofs = collect(1:ndofs(dh))
-    JuAFEM.copy!!(dbc.free_dofs, alldofs)
+    Ferrite.copy!!(dbc.free_dofs, alldofs)
 end
 
 solver = LocalDissipationSolver(

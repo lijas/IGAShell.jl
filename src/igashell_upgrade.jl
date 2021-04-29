@@ -1,5 +1,5 @@
 
-function _commit_part!(dh::JuAFEM.AbstractDofHandler, 
+function _commit_part!(dh::Ferrite.AbstractDofHandler, 
                       igashell::IGAShell{dim_p,dim_s}, 
                       state::StateVariables) where {dim_p,dim_s}
 
@@ -72,7 +72,7 @@ function _commit_part!(dh::JuAFEM.AbstractDofHandler,
     # Find these, and set the state of these cells to MIXED
     # Also, create the "instruction" for the dofhandler on how to upgrade dofs for the cells
     for (ic, cellid) in enumerate(igashell.cellset)
-        _celldofs = JuAFEM.celldofs(dh, cellid)
+        _celldofs = Ferrite.celldofs(dh, cellid)
         ue = state.d[_celldofs]
         Δue = state.Δd[_celldofs]
         
@@ -109,7 +109,7 @@ function determine_crack_growth(dh::MixedDofHandler, igashell::IGAShell, interfa
     cp_to_upgrade = Int[]
 
     ncontroloints = length(igashell.adaptivity.control_point_states)
-    nnodes = JuAFEM.nnodes_per_cell(igashell)
+    nnodes = Ferrite.nnodes_per_cell(igashell)
     cellnodes = zeros(Int, nnodes)
     
     #
@@ -119,7 +119,7 @@ function determine_crack_growth(dh::MixedDofHandler, igashell::IGAShell, interfa
     if mean_damage > LIMIT_DAMAGE_VARIABLE(layerdata(igashell))
 
         #Get all nodeids in this cell,
-        JuAFEM.cellnodes!(cellnodes, dh, cellid)
+        Ferrite.cellnodes!(cellnodes, dh, cellid)
         
         #Loop over all nodes in the cell
         for cpid in cellnodes
