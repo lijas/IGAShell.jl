@@ -147,6 +147,74 @@ function get_cube_mesh(cellstate; h, b, L)
     return grid, igashell
 end
 
+
+function get_test_mesh(CELLSTATE::IgAShell.CELLSTATE, nelx, damage)
+
+    data = ProblemData(
+        dim = 2,
+        tend = 1.0,
+        adaptive = true
+    )
+
+    ORDERS = (2,2)
+    angles = deg2rad.([0.0, 0.0, 0.0, 0.0])
+    nlayers = length(angles)
+    ninterfaces = nlayers-1
+
+    material(_α) = MatTransvLinearElastic(E1 = 61.65e3, E2 = 61.65e3, E3 = 13.61e3,ν_12 = 0.3187, ν_13 = 0.3161, ν_23 = 0.3161, G_13 = 4.55e3, G_12 = 23.37e3, G_23 = 4.55e3,α = _α) 
+    layermats = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles]
+
+    nurbsmesh = IgAShell.IgAShell.IGA.generate_nurbsmesh((nelx,), (ORDERS[1],), (1.0,), sdim=2)
+    data.grid = IgAShell.IGA.convert_to_grid_representation(nurbsmesh)
+    
+    cellstates = [CELLSTATE for i in 1:nelx]
+    
+    interface_damage = damage*ones(Float64, ninterfaces, nelx)
+    
+    #IGAshell data
+    igashelldata = 
+    IgAShell.IGAShellData(;
+        layer_materials           = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles],
+        interface_material        = Five.MatCZKolluri(σₘₐₓ = 60 * 0.5,τₘₐₓ = 90 * 0.5,Φₙ = 211.0/1000,Φₜ = 1050.0/1000),
+        orders                    = ORDERS,
+        knot_vectors              = nurbsmesh.knot_vectors,
+        thickness                 = 1.0,
+        initial_cellstates        = cellstates,
+        initial_interface_damages = interface_damage,
+        nqp_inplane_order         = 3,
+        nqp_ooplane_per_layer     = 2,
+        adaptable                 = true,
+            limit_stress_criterion   = 10.993,
+            limit_damage_criterion   = 0.01,
+            search_radius            = 10.0,
+            locked_elements          = Int[],
+        small_deformations_theory = false,
+        nqp_interface_order       = 4
+    )  
+    
+    igashell = 
+    IgAShell.IGAShell(
+        cellset = 1:nelx, 
+        connectivity = reverse(nurbsmesh.IEN, dims=1), 
+        data = igashelldata
+    ) 
+    push!(data.parts, igashell)
+
+    data.output[] = Output(
+        interval = 0.0,
+        runname = "test",
+        savepath = "./"
+    )
+
+    state, globaldata = build_problem(data) do dh, parts, dbc
+        instructions = IgAShell.initial_upgrade_of_dofhandler(dh, igashell)
+        Five.update_dofhandler!(dh, StateVariables(Float64, ndofs(dh)), instructions)
+    end
+
+    return state, globaldata
+
+end
+
 @testset "igashellvalues_curved" begin
 
     # # #
@@ -390,6 +458,46 @@ end
     (IgAShell.get_active_basefunctions_in_interface(1, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [3]) |> all
     (IgAShell.get_active_basefunctions_in_interface(2, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [5,6]) |> all
     (IgAShell.get_active_basefunctions_in_interface(3, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [8,9]) |> all
+end
+
+@testset "stiffness_matrix_lumped" begin
+    state, globaldata = get_test_mesh(IgAShell.LUMPED, 1, 0.0)
+
+    fill!(state.system_arrays, 0.0)
+    Five.assemble_stiffnessmatrix_and_forcevector!(globaldata.dh, state, globaldata)
+    @test norm(state.system_arrays.Kⁱ) ≈ 79420.08082130156
+end
+
+@testset "stiffness_matrix_layered" begin
+    state, globaldata = get_test_mesh(IgAShell.LAYERED, 1, 0.0)
+
+    fill!(state.system_arrays, 0.0)
+    Five.assemble_stiffnessmatrix_and_forcevector!(globaldata.dh, state, globaldata)
+    @test norm(state.system_arrays.Kⁱ) ≈ 159622.44106964912
+end
+
+@testset "stiffness_matrix_discont" begin
+    state, globaldata = get_test_mesh(IgAShell.FULLY_DISCONTINIUOS, 1, 0.0)
+
+    fill!(state.system_arrays, 0.0)
+    Five.assemble_stiffnessmatrix_and_forcevector!(globaldata.dh, state, globaldata)
+    @test norm(state.system_arrays.Kⁱ) ≈ 158770.59191158036
+end
+
+@testset "stiffness_matrix_discont_with_damage" begin
+    state, globaldata = get_test_mesh(IgAShell.FULLY_DISCONTINIUOS, 1, 0.5)
+
+    fill!(state.system_arrays, 0.0)
+    Five.assemble_stiffnessmatrix_and_forcevector!(globaldata.dh, state, globaldata)
+    @test norm(state.system_arrays.Kⁱ) ≈ 138016.89592686333
+end
+
+@testset "stiffness_matrix_discont_with_damage_nelx3" begin
+    state, globaldata = get_test_mesh(IgAShell.FULLY_DISCONTINIUOS, 3, 0.5)
+
+    fill!(state.system_arrays, 0.0)
+    Five.assemble_stiffnessmatrix_and_forcevector!(globaldata.dh, state, globaldata)
+    @test norm(state.system_arrays.Kⁱ) ≈ 184212.0377700771
 end
 
 #=
