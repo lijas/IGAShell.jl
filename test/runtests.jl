@@ -1,7 +1,6 @@
-
 using Test
+using IgAShell
 using Five
-using IGA
 
-include("test_igashell_values.jl")
+include("igashell_test.jl")
 include("test_igashell_examples.jl")
