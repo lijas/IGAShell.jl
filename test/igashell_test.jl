@@ -99,7 +99,6 @@ function get_curved_mesh(cellstate; h, b, R)
 
     igashell = IgAShell.IGAShell(
         cellset = collect(1:getncells(grid)), 
-        connectivity = reverse(nurbsmesh.IEN, dims=1), 
         data = igashelldata) 
 
     return grid, igashell
@@ -195,7 +194,6 @@ function get_test_mesh(CELLSTATE::IgAShell.CELLSTATE, nelx, damage)
     igashell = 
     IgAShell.IGAShell(
         cellset = 1:nelx, 
-        connectivity = reverse(nurbsmesh.IEN, dims=1), 
         data = igashelldata
     ) 
     push!(data.parts, igashell)

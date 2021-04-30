@@ -86,7 +86,6 @@ IgAShell.IGAShellData(;
 igashell = 
 IgAShell.IGAShell(
     cellset = partset1, 
-    connectivity = nurbsmesh.IEN,#reverse(nurbsmesh.IEN, dims=1), 
     data = igashelldata
 ) 
 push!(data.parts, igashell)

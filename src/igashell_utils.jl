@@ -37,10 +37,11 @@ end
 function initial_upgrade_of_dofhandler(dh::MixedDofHandler, igashell::IGAShell)
 
     instructions = Five.FieldDimUpgradeInstruction[]
+    cellnodes = igashell.cache.cellnodes
 
     for (ic, cellid) in enumerate(igashell.cellset)
 
-        cellnodes = igashell.cell_connectivity[:, ic]
+        Ferrite.cellnodes!(cellnodes, dh, cellid)
         cellnode_states = adapdata(igashell).control_point_states[cellnodes]
 
         initial_cellnode_states = fill(LUMPED_CPSTATE, length(cellnode_states))
@@ -48,7 +49,7 @@ function initial_upgrade_of_dofhandler(dh::MixedDofHandler, igashell::IGAShell)
         if cellnode_states != initial_cellnode_states
             ndofs = ndofs_per_cell(dh, cellid)
 
-            instr = construct_upgrade_instruction(igashell, cellid, initial_cellnode_states, cellnode_states, zeros(Float64, ndofs), zeros(Float64, ndofs))
+            instr = construct_upgrade_instruction(igashell, cellid, cellnodes, initial_cellnode_states, cellnode_states, zeros(Float64, ndofs), zeros(Float64, ndofs))
             push!(instructions, instr)
         end
 
@@ -134,34 +135,6 @@ end
 function active_basefunctions(field_dim::Int, ::Int)
     return 1:field_dim
 end
-
-
-#igashelldofs(dh::Ferrite.AbstractDofHandler, igashell::IGAShell, index::GeometryObject) = celldofs(dh, index[1])[igashelldofs(igashell, index)]
-
-function igashelldofs(igashell::IGAShell{dim_p,dim_s}, index::GeometryObject, components::Vector{Int}=collect(1:dim_s)) where {dim_p,dim_s}
-
-    cellid = index[1]
-    ip = getmidsurface_ip(layerdata(igashell))
-
-    facepoints = geometryobject(ip, index)
-
-    face_dofs = Int[]; currentdof = 1
-    for (i, nodeid) in enumerate(cellconectivity(igashell, cellid))
-        nodestate = get_controlpoint_state(adapdata(igashell), nodeid)
-        nnodes_per_controlpoints = ndofs_per_controlpoint(igashell, nodestate) ÷ dim_s
-        if i in facepoints
-            for basefunc in active_basefunctions(nnodes_per_controlpoints, index)
-                for d in components
-                    push!(face_dofs, currentdof + (basefunc-1)*dim_s + d -1)
-                end
-            end
-        end
-        currentdof += nnodes_per_controlpoints*dim_s
-    end
-
-    return face_dofs
-end
-
 
 function extrapolate(y1,y2,x1,x2,x)
     return y1 + ((x-x1)/(x2-x1))*(y2-y1)

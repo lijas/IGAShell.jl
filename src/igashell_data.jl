@@ -418,3 +418,4 @@ getwidth(data::IGAShellData) = data.width
 LIMIT_STRESS_CRITERION(data::IGAShellData) = data.limit_stress_criterion
 LIMIT_DAMAGE_VARIABLE(data::IGAShellData) = data.limit_damage_criterion
 PROPAGATION_SEARCH_RADIUS(data::IGAShellData) = data.search_radius
+get_n_controlpoints(data::IGAShellData{dim_p}) where {dim_p} = prod( (i) -> length(data.knot_vectors[i]) - data.orders[i] - 1, 1:dim_p)
