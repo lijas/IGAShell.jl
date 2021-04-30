@@ -148,7 +148,6 @@ function get_cube_mesh(cellstate; h, b, L)
     return grid, igashell
 end
 
-
 function get_test_mesh(CELLSTATE::IgAShell.CELLSTATE, nelx, damage)
 
     data = ProblemData(
@@ -165,9 +164,9 @@ function get_test_mesh(CELLSTATE::IgAShell.CELLSTATE, nelx, damage)
     material(_α) = MatTransvLinearElastic(E1 = 61.65e3, E2 = 61.65e3, E3 = 13.61e3,ν_12 = 0.3187, ν_13 = 0.3161, ν_23 = 0.3161, G_13 = 4.55e3, G_12 = 23.37e3, G_23 = 4.55e3,α = _α) 
     layermats = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles]
 
-    nurbsmesh = IgAShell.IgAShell.IGA.generate_nurbsmesh((nelx,), (ORDERS[1],), (1.0,), sdim=2)
-    data.grid = IgAShell.IGA.convert_to_grid_representation(nurbsmesh)
-    
+    nurbsmesh = IgAShell.IGA.generate_nurbs_patch(:line, (nelx, ), (ORDERS[1], ), (1.0, ), sdim=2) 
+    data.grid = IgAShell.IGA.Grid(nurbsmesh)
+
     cellstates = [CELLSTATE for i in 1:nelx]
     
     interface_damage = damage*ones(Float64, ninterfaces, nelx)
@@ -321,9 +320,6 @@ end
     cv = get_and_reinit_cv(igashell, grid, getncells(grid)÷2)
     κ = getindex.(cv.κᵐ,1,1)
     @test all( isapprox.(κ, 1/R, atol=1e-2) )
-
-
-    #
     
 end
 
