@@ -120,9 +120,7 @@ version = "2.8.0"
 
 [[Five]]
 deps = ["Ferrite", "FileIO", "ForwardDiff", "InteractiveUtils", "JLD2", "LinearAlgebra", "Logging", "NLsolve", "Parameters", "ProgressMeter", "Reexport", "Revise", "SparseArrays", "StaticArrays", "Statistics", "Tensors", "TimerOutputs"]
-git-tree-sha1 = "88e41f347b0e191cb23262fbbbf4e282253f666b"
-repo-rev = "master"
-repo-url = "https://github.com/lijas/Five.jl.git"
+path = "/home/elias/.julia/dev/Five"
 uuid = "c1dc2280-3047-43cb-b4fc-644cce62e445"
 version = "0.1.0"
 

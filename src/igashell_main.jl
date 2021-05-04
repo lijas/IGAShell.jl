@@ -510,11 +510,14 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                                                             active_dofs, getwidth(layerdata(igashell))) 
                     state.system_arrays.fᴬ[celldofs[active_dofs]] += ife
             elseif assemtype == IGASHELL_DISSIPATION
+                ⁿinterfacestates = state.prev_partstates[ic].interfacestates
+                ⁿstates =  @view ⁿinterfacestates[:, iint]
+
                 ge = Base.RefValue(zero(T))
                 @timeit "integrate_cohesive_dissi" integrate_dissipation!(
                                                             cv_cohesive_top, cv_cohesive_bot,
                                                             interface_material(igashell), 
-                                                            states,
+                                                            ⁿstates,
                                                             ge, ife,                
                                                             ue_interface, 
                                                             Δue_interface, 
