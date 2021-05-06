@@ -152,11 +152,22 @@ solver = NewtonSolver(
 
 output = solvethis(solver, state, globaldata)
 
-if true
+using Test
+σ₀ = abs(P/(a*h))
+σᶻˣ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻˣ) ./ σ₀
+σᶻʸ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻʸ) ./ σ₀
+σᶻᶻ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻᶻ) ./ σ₀
+
+@test maximum(abs.(σᶻˣ_vec)) ≈ 0.33105552123729587
+@test maximum(abs.(σᶻʸ_vec)) ≈ 0.17613225608841945
+@test maximum(abs.(σᶻᶻ_vec)) ≈ 1.0997461316618535
+
+#For debug plotting
+if false
     using Plots; pyplot(); PyPlot.pygui(true)
     using JLD2; using FileIO
 
-    σ₀ = abs(P/(a*h))
+    
     
     σᶻˣ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻˣ) ./ σ₀
     σᶻʸ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻʸ) ./ σ₀
