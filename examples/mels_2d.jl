@@ -55,8 +55,9 @@ MatTransvLinearElastic(
 layermats = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles]
 
 #
-nurbsmesh = IgAShell.IGA.generate_nurbsmesh((NELX, ), (ORDERS[1], ), (L, ), sdim=DIM) 
-data.grid = IgAShell.IGA.convert_to_grid_representation(nurbsmesh)
+#nurbsmesh = IgAShell.IGA.generate_nurbsmesh((NELX, ), (ORDERS[1], ), (L, ), sdim=DIM) 
+nurbsmesh = IgAShell.IGA.generate_nurbs_patch(:line, (NELX, ), (ORDERS[1], ), (L, ), sdim=DIM) 
+data.grid = IgAShell.IGA.Grid(nurbsmesh)
 
 #Sets
 addcellset!(data.grid, "precrackedu", (x) -> x[1] > L-au)

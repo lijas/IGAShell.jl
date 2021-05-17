@@ -5,7 +5,7 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
 
     instructions = FieldDimUpgradeInstruction[]
     upgraded_cells = Int[]
-
+    cellnodes = zeros(Int, Ferrite.nnodes_per_cell(igashell))
     #copy of the current node states
     node_states = deepcopy(adapdata(igashell).control_point_states)
 
@@ -61,7 +61,8 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
 
             # Loop through all nodes for this cell and set the state 
             # of the node to the state of the cell, if it is an "upgrade"
-            for (i, nodeid) in enumerate(igashell.cell_connectivity[:, ic])
+            Ferrite.cellnodes!(cellnodes, dh, cellid)
+            for (i, nodeid) in enumerate(cellnodes)
                 node_states[nodeid] = combine_states(node_states[nodeid], get_cpstate(upgrade_to, i), ninterfaces(igashell))
             end
         end
@@ -76,7 +77,7 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
         ue = state.d[_celldofs]
         Δue = state.Δd[_celldofs]
         
-        cellnodes = igashell.cell_connectivity[:, ic]
+        Ferrite.cellnodes!(cellnodes, dh, cellid)
         new_cellnode_states = node_states[cellnodes]
         current_cellnode_states = igashell.adaptivity.control_point_states[cellnodes]
 
@@ -86,7 +87,7 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
             continue
         end
 
-        instr = construct_upgrade_instruction(igashell, cellid, current_cellnode_states, new_cellnode_states, ue, Δue)
+        instr = construct_upgrade_instruction(igashell, cellid, cellnodes, current_cellnode_states, new_cellnode_states, ue, Δue)
         push!(instructions, instr)
 
         # Check if the element is mixed.
@@ -236,7 +237,7 @@ function stress_interface_index(qplayerid::Int, nqpinplane::Int, dim_p::Int)
     return idx
 end
 
-function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, current_cellnode_state::AbstractVector{CPSTATE}, cellnode_states::AbstractVector{CPSTATE}, ue::Vector{T}, Δue::Vector{T}) where {dim_p,dim_s,T}
+function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid::Int, cellnodes::Vector{Int}, current_cellnode_state::AbstractVector{CPSTATE}, cellnode_states::AbstractVector{CPSTATE}, ue::Vector{T}, Δue::Vector{T}) where {dim_p,dim_s,T}
 
     local_dof_idxs = Int[]
     current_fielddims = Int[]
@@ -250,7 +251,7 @@ function construct_upgrade_instruction(igashell::IGAShell{dim_p,dim_s,T}, cellid
     # Loop through all node in the cell and create the "instructions" that the 
     # dofhandler needs in order to distribute new dofs.
 
-    for (i, nodeid) in enumerate(igashell.cell_connectivity[:,cellid])
+    for (i, nodeid) in enumerate(cellnodes)
 
         cp_state = current_cellnode_state[i]
         current_fielddim = ndofs_per_controlpoint(igashell, cp_state)

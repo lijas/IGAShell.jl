@@ -8,6 +8,7 @@ struct IGAShellAdaptivity{T}
     cellstates::Vector{CELLSTATE}
     control_point_states::Vector{CPSTATE}
     propagation_checked::Matrix{Bool}
+    locked_elements::Vector{Int}
     locked_control_points::Vector{Int}
 
     lumped2layered::IGA.BezierExtractionOperator{T}
@@ -32,7 +33,6 @@ function get_controlpoint_state(adap::IGAShellAdaptivity, cpid::Vector{Int})
     return adap.control_point_states[cpid]
 end
 
-
 function set_controlpoint_state!(adap::IGAShellAdaptivity, cpid::Int, state::CPSTATE)
     adap.control_point_states[cpid] = state
 end
@@ -41,7 +41,7 @@ function setcellstate!(adap::IGAShellAdaptivity, cellid::Int, state::CELLSTATE)
     adap.cellstates[cellid] = state
 end
 
-function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, cell_connectivity::Matrix{Int}, ncells, nnodes) where {dim_p,dim_s,T}
+function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, ncells) where {dim_p,dim_s,T}
 
     order = data.orders[dim_s]
     ninterfaces = data.nlayers-1
@@ -66,49 +66,58 @@ function IGAShellAdaptivity(data::IGAShellData{dim_p,dim_s,T}, cell_connectivity
     Cla2di = IGA.bezier_extraction_to_vector(Cmat_la2di')
     Clu2di = IGA.bezier_extraction_to_vector(Cmat_lu2di')
 
+    propagation_checked = [false for _ in 1:ninterfaces, _ in 1:ncells]
+    
+    node_states = CPSTATE[] #initialized later in _init_cpstates_cellstates
+    locked_control_points = Int[]
+
+    return IGAShellAdaptivity(data.initial_cellstates, node_states, propagation_checked, data.locked_elements, locked_control_points,
+                              Clu2la, Cla2di, Clu2di, 
+                              weakdiscont2discont, strongdiscont2discont,
+                              interface_knots, order)
+end
+
+function _init_cpstates_cellstates!(dh::Ferrite.AbstractDofHandler, igashell)
+
+    nnodes = get_n_controlpoints(igashell.layerdata)
+    cellnodes = igashell.cache.cellnodes
+
     #Some of the cells will be initialized with LUMPED, and some with LYARED/DISCONTINIUOS
     # This means that some cells will be in a mixed mode... Determine those
     # Prioritize the DISCONTINIUOS before LAYERED and LUMPED, ie. if one node is both lumped 
     # and disocontinous, choose it to be dinscontionous
     node_states = fill(LUMPED_CPSTATE, nnodes)
 
-    for cellid in 1:ncells
-        cellstate = data.initial_cellstates[cellid] 
-        for cellnodes in cell_connectivity[:, cellid]
-            for nodeid in cellnodes
-                node_states[nodeid] = combine_states(node_states[nodeid], first(cellstate.cpstates), ninterfaces)
-            end
+    for cellid in 1:getncells(igashell)
+        cellstate = igashell.adaptivity.cellstates[cellid] 
+        Ferrite.cellnodes!(cellnodes, dh, cellid)
+        for nodeid in cellnodes
+            node_states[nodeid] = combine_states(node_states[nodeid], first(cellstate.cpstates), ninterfaces(igashell))
         end
+
     end
 
     #Check if there is any cell that is has MIXED states controlpoints
-    for cellid in 1:ncells
-        nodeids = cell_connectivity[:, cellid]
-        cellnode_states = node_states[nodeids]
+    for cellid in 1:getncells(igashell)
+        Ferrite.cellnodes!(cellnodes, dh, cellid)
+        cellnode_states = node_states[cellnodes]
 
         #if NOT all of the nodes in the cell are equal, the element is mixed
         if !all(first(cellnode_states) .== cellnode_states)
-            data.initial_cellstates[cellid] = CELLSTATE(_MIXED, copy(cellnode_states))
+            igashell.adaptivity.cellstates[cellid] = CELLSTATE(_MIXED, copy(cellnode_states))
         end
 
     end
-    
-    propagation_checked = [false for _ in 1:ninterfaces, _ in 1:ncells]
 
     #Some cells are not allowed to be upgraded (locked).. store the contorl points of these cells
-    locked_control_points = Int[]
-    for cellid in data.locked_elements
-        for cell_nodes in cell_connectivity[:, cellid]
-            for nodeid in cell_nodes
-                push!(locked_control_points, nodeid)
-            end
+    for cellid in igashell.adaptivity.locked_elements
+        Ferrite.cellnodes!(cellnodes, dh, cellid)
+        for nodeid in cellnodes
+            push!(igashell.adaptivity.locked_control_points, nodeid)
         end
     end
 
-    return IGAShellAdaptivity(data.initial_cellstates, node_states, propagation_checked, locked_control_points,
-                              Clu2la, Cla2di, Clu2di, 
-                              weakdiscont2discont, strongdiscont2discont,
-                              interface_knots, order)
+    Ferrite.copy!!(igashell.adaptivity.control_point_states, node_states)
 end
 
 function get_upgrade_operator(adap::IGAShellAdaptivity, from::CPSTATE, to::CPSTATE)

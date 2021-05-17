@@ -1,5 +1,13 @@
 export IGAShellState, IGAShell
 
+struct IGAShellCache
+    cellnodes::Vector{Int}
+    #celldofs::Vector{Int}
+    #cellcoords::Vector{Vec{dim,T}}
+end
+
+IGAShellCache(data::IGAShellData) = IGAShellCache(zeros(Int, Ferrite.nnodes_per_cell(data)))
+
 """
     IGAShell
 
@@ -10,16 +18,17 @@ struct IGAShell{dim_p, dim_s, T,
                 intdata<:IGAShellIntegrationData, 
                 adapdata<:IGAShellAdaptivity, 
                 vtkdata<:IGAShellVTK,
-                srdata<:IGAShellStressRecovory} <: Five.AbstractPart{dim_s}
+                srdata<:IGAShellStressRecovory,
+                cache<:IGAShellCache} <: Five.AbstractPart{dim_s}
 
     layerdata::data
     integration_data::intdata
     adaptivity::adapdata
     vtkdata::vtkdata
     stress_recovory::srdata
+    cache::cache
 
     cellset::Vector{Int}
-    cell_connectivity::Matrix{Int}
 end
 
 #Utility functions
@@ -28,9 +37,6 @@ adapdata(igashell::IGAShell) = igashell.adaptivity
 intdata(igashell::IGAShell) = igashell.integration_data
 vtkdata(igashell::IGAShell) = igashell.vtkdata
 srdata(igashell::IGAShell) = igashell.stress_recovory
-
-cellconectivity!(nodes::Vector{Int}, igashell::IGAShell, cellid::Int) =  nodes .= igashell.cell_connectivity[:, cellid]
-cellconectivity(igashell::IGAShell, cellid::Int) = @view igashell.cell_connectivity[:, cellid]
 
 Ferrite.getnquadpoints(igashell::IGAShell) = getnquadpoints_per_layer(igashell)*nlayers(igashell)
 getnquadpoints_inplane(igashell::IGAShell) = length(getweights(intdata(igashell).iqr))
@@ -61,7 +67,6 @@ getcellstate(igashell::IGAShell, i::Int) = igashell.adaptivity.cellstates[i]
 Ferrite.nnodes_per_cell(igashell::IGAShell{dim_p}, cellid::Int=1) where dim_p = prod(igashell.layerdata.orders[1:dim_p].+1)::Int#getnbasefunctions(igashell.cv_inplane) ÷ dim_p
 Ferrite.getdim(igashell::IGAShell{dim_p,dim_s}) where {dim_p,dim_s} = dim_s
 Ferrite.getncells(igashell::IGAShell) = length(igashell.cellset)
-Ferrite.getnnodes(igashell::IGAShell) = maximum(igashell.cell_connectivity)
 
 Five.get_fields(igashell::IGAShell) = [Field(:u, getmidsurface_ip(layerdata(igashell)), ndofs_per_controlpoint(igashell, LUMPED_CPSTATE))]
 
@@ -74,7 +79,7 @@ function get_inplane_qp_range(n_qp_per_layer::Int, n_inpqp::Int, ilayer::Int, ro
     return (1:n_inpqp) .+ offset
 end
 
-function _igashell_input_checks(data::IGAShellData{dim_p, dim_s}, cellset::AbstractVector{Int}, cell_connectivity::Matrix{Int}) where {dim_s,dim_p}
+function _igashell_input_checks(data::IGAShellData{dim_p, dim_s}, cellset::AbstractVector{Int}) where {dim_s,dim_p}
 
     @assert(!any(is_mixed.(data.initial_cellstates)))
     @assert( dim_s == length(data.orders) )
@@ -83,33 +88,33 @@ end
 
 function IGAShell(;
     cellset::AbstractVector{Int}, 
-    connectivity::Matrix{Int},
     data::IGAShellData{dim_p,dim_s,T}
     ) where {dim_p,dim_s,T}
 
-    _igashell_input_checks(data, cellset, connectivity)
+    _igashell_input_checks(data, cellset)
 
     ncells = length(cellset)
-    ncontrol_points = maximum(connectivity)
 
     #Setup adaptivity structure
-    adapdata = IGAShellAdaptivity(data, connectivity, ncells, ncontrol_points)
+    adapdata = IGAShellAdaptivity(data, ncells)
 
     #
-    Ce_mat, _ = IGA.compute_bezier_extraction_operators(data.orders[1:dim_p]..., data.knot_vectors[1:dim_p]...)
+    Ce_mat, _ = IGA.compute_bezier_extraction_operators(data.orders[1:dim_p], data.knot_vectors[1:dim_p])
     Ce_vec = IGA.bezier_extraction_to_vectors(Ce_mat)
     
     #vtkdata
     vtkdata = IGAShellVTK(data)
     intdata = IGAShellIntegrationData(data, Ce_vec)
     srdata = IGAShellStressRecovory(data)
+    cache = IGAShellCache(data)
 
-    return IGAShell{dim_p,dim_s,T, typeof(data), typeof(intdata), typeof(adapdata), typeof(vtkdata), typeof(srdata)}(data, intdata, adapdata, vtkdata, srdata, cellset, connectivity)
+    return IGAShell{dim_p,dim_s,T, typeof(data), typeof(intdata), typeof(adapdata), typeof(vtkdata), typeof(srdata), typeof(cache)}(data, intdata, adapdata, vtkdata, srdata, cache, cellset)
 
 end
 
 function Five.init_part!(igashell::IGAShell, dh::Ferrite.AbstractDofHandler)
     _init_vtk_grid!(dh, igashell)
+    _init_cpstates_cellstates!(dh, igashell)
 end
 
 struct IGAShellState{MS1<:Five.AbstractMaterialState,MS2<:Five.AbstractMaterialState} <: Five.AbstractPartState

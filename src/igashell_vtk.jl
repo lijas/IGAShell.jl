@@ -162,7 +162,7 @@ function Five.get_vtk_displacements(dh::Ferrite.AbstractDofHandler, igashell::IG
         ue = state.d[celldofs]
 
         #Transform displayements to fully discontinuous state
-        cellconectivity!(nodes, igashell, ic)
+        Ferrite.cellnodes!(nodes, dh, ic)
         ue_bezier = T[]
         offset = 1
      
@@ -211,14 +211,16 @@ function Five.get_vtk_celldata(igashell::IGAShell{dim_p,dim_s,T}, output::VTKCel
     end
 
     cellstates = zeros(Int, nvtkcells)
+    cellnodes = zeros(Int, Ferrite.nnodes_per_cell(igashell))
+
     for (ic, cellid) in enumerate(igashell.cellset)
         cellstate = getcellstate(adapdata(igashell), ic)
         for ilay in 1:nlayers(igashell)
             for vtkcell in nvtkcells_per_layer(vtkdata(igashell))
-                cellnodes = zeros(Int, Ferrite.nnodes_per_cell(igashell, ic))
-                cellconectivity = cellconectivity!(cellnodes, igashell, ic)
-                tmp_cellstate = get_controlpoint_state(adapdata(igashell), cellconectivity[1])
-                for (i, nodeid) in enumerate(cellconectivity[2:end])
+                
+                Ferrite.cellnodes!(cellnodes, globaldata.dh, ic)
+                tmp_cellstate = get_controlpoint_state(adapdata(igashell), cellnodes[1])
+                for (i, nodeid) in enumerate(cellnodes[2:end])
                     cp_state = get_controlpoint_state(adapdata(igashell), nodeid)
                     tmp_cellstate = tmp_cellstate.state > cp_state.state ? tmp_cellstate : cp_state
                 end

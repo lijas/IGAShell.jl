@@ -42,8 +42,8 @@ MatTransvLinearElastic(
 layermats = [Material2D(material(α), Five.PLANE_STRESS) for α in angles]
 
 #
-nurbsmesh = IgAShell.IGA.generate_nurbsmesh((NELX, ), (ORDERS[1], ), (L, ), sdim=DIM) 
-data.grid = IgAShell.IGA.convert_to_grid_representation(nurbsmesh)
+nurbsmesh = IgAShell.IGA.generate_nurbs_patch(:line, (NELX, ), (ORDERS[1], ), (L, ), sdim=DIM) 
+data.grid = IgAShell.IGA.BezierGrid(nurbsmesh)
 
 #Sets
 addcellset!(data.grid, "precracked", (x) -> x[1] > L-a0)
@@ -86,7 +86,6 @@ IgAShell.IGAShellData(;
 igashell = 
 IgAShell.IGAShell(
     cellset = partset1, 
-    connectivity = reverse(nurbsmesh.IEN, dims=1), 
     data = igashelldata
 ) 
 push!(data.parts, igashell)

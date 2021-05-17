@@ -367,18 +367,18 @@ function IGAShellData(;
     zcoords::Vector{T}                      = collect(-thickness/2:(thickness/nlayers):thickness/2),
     initial_interface_damages::Matrix{T}    = zeros(Float64, nlayers-1, length(initial_cellstates)),
     adaptable::Bool                         = false,
-    limit_stress_criterion::T               = nothing,
-    limit_damage_criterion::T               = nothing,
-    search_radius::T                        = nothing,
+    limit_stress_criterion::T               = -1.0,
+    limit_damage_criterion::T               = -1.0,
+    search_radius::T                        = -1.0,
     locked_elements::AbstractVector{Int}    = Int[],
     small_deformations_theory::Bool         = false,
     nqp_interface_order::Int                = nqp_inplane_order,
     add_czcells_vtk::Bool                   = true) where {dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial}
 
     if adaptable
-        if (limit_stress_criterion === nothing ||
-            limit_damage_criterion === nothing ||
-            search_radius === nothing)
+        if (limit_stress_criterion === -1.0 ||
+            limit_damage_criterion === -1.0 ||
+            search_radius === -1.0)
 
             error("If adaptive IGASHELL is defined, you must specify all variables related to adaptivity.")
         end
@@ -418,3 +418,4 @@ getwidth(data::IGAShellData) = data.width
 LIMIT_STRESS_CRITERION(data::IGAShellData) = data.limit_stress_criterion
 LIMIT_DAMAGE_VARIABLE(data::IGAShellData) = data.limit_damage_criterion
 PROPAGATION_SEARCH_RADIUS(data::IGAShellData) = data.search_radius
+get_n_controlpoints(data::IGAShellData{dim_p}) where {dim_p} = prod( (i) -> length(data.knot_vectors[i]) - data.orders[i] - 1, 1:dim_p)
