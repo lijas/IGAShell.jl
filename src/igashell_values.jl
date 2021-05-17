@@ -575,6 +575,12 @@ function Ferrite.spatial_coordinate(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, 
     return Xᴹ + cv.oqr.points[oqp][1]*D
 end
 
+function spatial_midsurface_coordinate(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, x::AbstractVector{Vec{dim_s,T}}) where {dim_s,dim_p,T}
+    @assert(iqp <= getnquadpoints_inplane(cv))
+    Xᴹ = shape_value(cv, iqp, x)
+    return Xᴹ
+end
+
 function basis_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, i::Int, Θ::Int) where {dim_s,dim_p,T}
     return cv.dNdξ[i,qp][:,Θ]
 end

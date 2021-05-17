@@ -219,6 +219,7 @@ end
 function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{dim_s,dim_p,T}, σ_states::Vector{<:SymmetricTensor}, cv_sr::ISL, cv::ISL, ipᴸ, cvᴸ, celldata, ilay::Int) where {ISL<:IGAShellValues,dim_s,dim_p,T} 
 
     Xᴸ = srdata.cache.Xᴸ; uᴸ = srdata.cache.uᴸ
+    Xᴸ_mid = copy(srdata.cache.Xᴸ)
     
     h = srdata.thickness
     nqp_oop_lay = srdata.nqp_oop_lay
@@ -235,13 +236,14 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
         range = collect(get_inplane_qp_range(nqp_oop_lay*srdata.nqp_inp, srdata.nqp_inp, ilay, lqp))
         range = range[srdata.orderingᴸ]
         for i in 1:length(range)
+            Xᴸ_mid[i] = spatial_midsurface_coordinate(cv, srdata.orderingᴸ[i], celldata.Xᵇ)
             Xᴸ[i] = spatial_coordinate(cv, range[i], celldata.Xᵇ)
             uᴸ[i] = function_value(cv, range[i], celldata.ue)
         end
 
         xᴸ = Xᴸ + uᴸ 
 
-        _a, _da, _λ, _κ = calculate_stress_recovory_variables(ipᴸ, Xᴸ, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
+        _a, _da, _λ, _κ = calculate_stress_recovory_variables(ipᴸ, Xᴸ_mid, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
         a, da, λ, κ = _store_as_tensors(_a, _da, _λ, _κ)
 
         # lambda and kappa are both wrong from the lagrange-interpolation
@@ -263,10 +265,10 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
             p, V = eigen(κ, sortby = x -> -abs(x))
         
         #Calculate and extract gradients for stress recovory equations
-        σ = function_value(cvᴸ, 1, σ_states, range)
+        _σ = function_value(cvᴸ, 1, σ_states, range)
         ∇σ = Ferrite.function_derivative(cvᴸ, 1, σ_states, range)
         ∇∇σ = function_second_derivative(cvᴸ, 1, σ_states, range)
-        ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(∇σ, ∇∇σ)
+        σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(_σ, ∇σ, ∇∇σ)
         
         integration_values[lqp+1,ilay] = StressRecovoryIntegrationValues(σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, κ, a, da, λ, ζ)
     end
@@ -311,7 +313,7 @@ function calculate_stress_recovory_integrals_for_layer!(srdata::IGAShellStressRe
 
         dZ = (integration_values[i+1,ilay,ic].ζ - integration_values[i,ilay,ic].ζ)*h/2
         Z += dZ
-        
+
         #SR-equations
         σᶻˣ = (λ₁*λ₂/a₁ * ∇₁σ₁₁ +
                 λ₁*λ₁/a₂ * ∇₂σ₁₂ +
@@ -449,17 +451,24 @@ function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{3,T}}, _λ::Vector{T},
     return a, da, λ, _κ
 end
 
-function _store_as_tensors(∇σ::Vector, ∇∇σ::Matrix)
-    if length(∇σ) == 1
+function _store_as_tensors(_σ::SymmetricTensor, ∇σ::Vector, ∇∇σ::Matrix)
+    if length(∇σ) == 1 #2d
+
+        # Note: Maybe remove _σ22
+        # In 2d, _σ22 should typilcally be much lower than _σ11, but this is might
+        # not be the case for plane strain and low forces/displacements.
+
+        σ = _σ #SymmetricTensor{2,3}((_σ[1,1], 0.0, _σ[1,3], 0.0, _σ[2,3], _σ[3,3]))
         ∇₁σ, ∇₂σ, = (∇σ[1], zero(SymmetricTensor{2,3,Float64}))
         ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ = (∇∇σ[1,1], zero(SymmetricTensor{2,3,Float64}),
                                   zero(SymmetricTensor{2,3,Float64}),
                                   zero(SymmetricTensor{2,3,Float64}))
-    elseif length(∇σ) == 2
+    elseif length(∇σ) == 2 # 3d
+        σ = _σ
         ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ = (∇σ..., ∇∇σ...)
     else
         error("Wrong size")
     end
 
-    return ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ
+    return σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ
 end

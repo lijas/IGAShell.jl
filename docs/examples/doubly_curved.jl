@@ -158,9 +158,9 @@ using Test
 σᶻʸ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻʸ) ./ σ₀
 σᶻᶻ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻᶻ) ./ σ₀
 
-@test maximum(abs.(σᶻˣ_vec)) ≈ 0.33105552123729587
-@test maximum(abs.(σᶻʸ_vec)) ≈ 0.17613225608841945
-@test maximum(abs.(σᶻᶻ_vec)) ≈ 1.0997461316618535
+@test maximum(abs.(σᶻˣ_vec)) ≈ 0.32610132855073826
+@test maximum(abs.(σᶻʸ_vec)) ≈ 0.1774812741136119
+@test maximum(abs.(σᶻᶻ_vec)) ≈ 1.0996261237077838
 
 #For debug plotting
 if false
@@ -174,7 +174,7 @@ if false
     σᶻᶻ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻᶻ) ./ σ₀
     ζ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :ζ)
     
-    fig = plot(reuse=false, layout = (2,3))
+    fig = plot(reuse=false, layout = (2,3), legend=false)
     plot!(fig[4], σᶻᶻ_vec, ζ_vec, label = "Lumped")
     plot!(fig[5], σᶻʸ_vec, ζ_vec, label = "Lumped")
     plot!(fig[6], σᶻˣ_vec, ζ_vec, label = "Lumped")
