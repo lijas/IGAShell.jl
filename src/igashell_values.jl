@@ -65,6 +65,7 @@ function function_second_derivative(fe_v::BasisValues{dim_p}, q_point::Int, u::A
     return d²udξ²
 end
 
+Base.copy(cv::BasisValues) = return BasisValues(copy(cv.N), copy(cv.dNdξ), copy(cv.d²Ndξ²))
 
 """
 
@@ -243,22 +244,22 @@ function set_oop_basefunctions!(cv::IGAShellValues{dim_s,dim_p,T}, ooplane_basis
 
 end
 
-function _inplane_nurbs_bezier_extraction(cv::IGAShellValues{dim_s,dim_p,T}, C::IGA.BezierExtractionOperator{T}) where {dim_s,dim_p,T}
-    dBdξ   = cv.inplane_values_bezier.dNdξ
-    B      = cv.inplane_values_bezier.N
+function _inplane_nurbs_bezier_extraction(cv::IGAShellValues{dim_s,dim_p,T}, nurbs::BasisValues, bezier::BasisValues, C::IGA.BezierExtractionOperator{T}) where {dim_s,dim_p,T}
+    dBdξ   = bezier.dNdξ
+    B      = bezier.N
     
     for iq in 1:getnquadpoints_inplane(cv)
         for ib in 1:getnbasefunctions_inplane(cv)
             
-            cv.inplane_values_nurbs.N[ib, iq] = zero(eltype(cv.inplane_values_nurbs.N))
-            cv.inplane_values_nurbs.dNdξ[ib, iq] = zero(eltype(cv.inplane_values_nurbs.dNdξ))
+            nurbs.N[ib, iq] = zero(eltype(nurbs.N))
+            nurbs.dNdξ[ib, iq] = zero(eltype(nurbs.dNdξ))
 
             C_ib = C[ib]
             
             for (i, nz_ind) in enumerate(C_ib.nzind)                
                 val = C_ib.nzval[i]
-                cv.inplane_values_nurbs.N[ib, iq]    += val*   B[nz_ind, iq]
-                cv.inplane_values_nurbs.dNdξ[ib, iq] += val*dBdξ[nz_ind, iq]
+                nurbs.N[ib, iq]    += val*   B[nz_ind, iq]
+                nurbs.dNdξ[ib, iq] += val*dBdξ[nz_ind, iq]
             end
         end
     end
@@ -420,14 +421,19 @@ function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords
 
 end
 
-function Ferrite.reinit!(cv::IGAShellValues, coords::Vector{Vec{dim_s,T}}) where {dim_s,T}
+function Ferrite.reinit!(cv::IGAShellValues, coords::NurbsOrBSplineCoords{dim_s,T}) where {dim_s,T}
 
     qp = 0
     for iqp in 1:getnquadpoints_inplane(cv)
         _reinit_midsurface!(cv, iqp, coords)
     end
     
-    _inplane_nurbs_bezier_extraction(cv, cv.current_bezier_operator[])
+    if coords isa NurbsCoords
+        _inplane_nurbs_preprocess(cv, coords[2])
+        _inplane_nurbs_bezier_extraction(cv, cv.inplane_values_nurbs, copy(cv.inplane_values_nurbs), cv.current_bezier_operator[])
+    else
+        _inplane_nurbs_bezier_extraction(cv, cv.inplane_values_nurbs, cv.inplane_values_bezier, cv.current_bezier_operator[])
+    end
     
     for oqp in 1:getnquadpoints_ooplane(cv)
         for iqp in 1:getnquadpoints_inplane(cv)
@@ -600,4 +606,106 @@ end
 
 function basis_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, i::Int) where {dim_s,dim_p,T}
     return cv.N[i,qp]
+end
+
+function shape_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (xᴮ, wᴮ)::NurbsCoords{dim_s,T}) where {dim_s,dim_p,T}
+    val = zero(Vec{dim_s,T})
+    nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
+    @assert(length(ue) == nbasefuncs)
+
+    W = 0.0
+    @inbounds for i in 1:nbasefuncs
+        W += cv.inplane_values_bezier.N[i,qp] * wᴮ[i]
+    end
+
+    @inbounds for i in 1:nbasefuncs
+        val += xᴮ[i] * wᴮ[i] *inv(W) * cv.inplane_values_bezier.N[i,qp]
+    end
+    return val
+end
+
+function shape_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (xᴮ, wᴮ)::NurbsCoords{dim_s,T}, Θ::Int) where {dim_s,dim_p,T}
+
+    grad = zero(Vec{dim_s,T})
+    nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
+    @assert(length(ue) == nbasefuncs)
+
+    W = 0.0
+    dWdξ = 0.0
+    @inbounds for i in 1:nbasefuncs
+        N = cv.inplane_values_bezier.N[i,qp]
+        dNdξ = cv.inplane_values_bezier.dNdξ[i,qp][θ]
+
+        W += N * wᴮ[i]
+        dWdξ +=  dNdξ * wᴮ[i]
+    end
+
+    @inbounds for i in 1:nbasefuncs
+        N = cv.inplane_values_bezier.N[i,qp]
+        dNdξ = cv.inplane_values_bezier.dNdξ[i,qp][θ]
+        
+        grad += xᴮ[i] * wᴮ[i] * inv(W^2) * (dNdξ * W - dWdξ * N)
+    end
+    return grad
+end
+
+function shape_parent_second_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (xᴮ, wᴮ)::NurbsCoords{dim_s,T}, θ::Tuple{Int,Int}) where {dim_s,dim_p,T}
+    hess = zero(Vec{dim_s,T})
+    nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
+    @assert(length(ue) == nbasefuncs)
+
+    W = 0.0
+    dWdξ = 0.0
+    d²Wdξ² = 0.0
+    @inbounds for i in 1:nbasefuncs
+        N = cv.inplane_values_bezier.N[i,qp]
+        dNdξ₁ = cv.inplane_values_bezier.dNdξ[i,qp][θ[1]]
+        dNdξ₂ = cv.inplane_values_bezier.dNdξ[i,qp][θ[2]]
+        d²Ndξ² = cv.inplane_values_bezier.d²Ndξ²[i,qp][θ[1],[θ[2]]]
+
+        W    += N * wᴮ[i]
+        dWdξ₁ +=  dNdξ₁ * wᴮ[i]
+        dWdξ₂ +=  dNdξ₂ * wᴮ[i]
+        d²Wdξ² +=  d²Ndξ² * wᴮ[i]
+    end
+
+    @inbounds for i in 1:nbasefuncs
+        N = cv.inplane_values_bezier.N[i,qp]
+        dNdξ₁ = cv.inplane_values_bezier.dNdξ[i,qp][θ[1]]
+        dNdξ₂ = cv.inplane_values_bezier.dNdξ[i,qp][θ[2]]
+        d²Ndξ² = cv.inplane_values_bezier.d²Ndξ²[i,qp][θ[1],[θ[2]]]
+        
+        hess += xᴮ[i] * wᴮ[i] *
+             -2*inv(W^3) * dWdξ₂ * (W*dNdξ₁ - dWdξ₁*N) + 
+             inv(W^2)*((dWdξ₂*dNdξ₁ + W*d²Ndξ²) - (d²Wdξ²*N + dWdξ₁*dNdξ₂))
+    end
+    return hess
+end
+
+function _inplane_nurbs_preprocess(cv::IGAShellValues{dim_s,dim_p,T}, wᴮ::Vector{T}) where {dim_s,dim_p,T}
+
+    nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
+    @assert(length(ue) == nbasefuncs)
+
+    @inbounds for i in 1:getnquadpoints_inplane(cv)
+
+        W = zero(T)
+        dWdξ = zero(Vec{dim,T})
+        @inbounds for j in 1:n_geom_basefuncs
+            dNdξ = cv.inplane_values_bezier.dNdξ[j,i]
+            N = cv.inplane_values_bezier.N[j, i]
+
+            W    += wᴮ[j] * N[j, i]
+            dWdξ += wᴮ[j] * dNdξ[j, i]
+        end
+
+        @inbounds for j in 1:nbasefuncs
+            dNdξ = cv.inplane_values_bezier.dNdξ[j,i]
+            N = cv_bezier.N[j, i]
+
+            cv.inplane_values_nurbs.dNdξ[j, i] = inv(W)*dNdξ - inv(W^2) * N * dWdξ
+            cv.inplane_values_nurbs.N[j, i] = N/W
+        end
+    end
+
 end
