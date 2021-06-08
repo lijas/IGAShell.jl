@@ -91,7 +91,7 @@ Base.iterate(I::Triad{dim}, state::Int=1) where {dim} = (state==dim+1) ?  nothin
 
 """
 
-struct IGAShellValues{dim_s,dim_p,T<:Real,M,M2} 
+struct IGAShellValues{dim_s,dim_p,T<:Real,M,M2,L} 
     
     #
     inplane_values_nurbs::BasisValues{dim_p,T,M}
@@ -106,6 +106,7 @@ struct IGAShellValues{dim_s,dim_p,T<:Real,M,M2}
     G  ::Vector{  Triad{dim_s,T}   }  #iqp, dim
     Gᴵ ::Vector{  Triad{dim_s,T}   }  #iqp, dim
     Eₐ ::Vector{  Triad{dim_s,T}   }  #iqp, dim
+    Eₐₐ::Vector{  MMatrix{dim_p,dim_p,Vec{dim_s,T},L}  }
     Dₐ ::Vector{  Triad{dim_s,T}   }  #iqp, dim x dim
     κ  ::Vector{ Tensor{2,dim_p,T,M}}
     κᵐ ::Vector{ Tensor{2,dim_p,T,M}}
@@ -129,6 +130,11 @@ struct IGAShellValues{dim_s,dim_p,T<:Real,M,M2}
 
     inp_ip::Interpolation
     oop_ip::Vector{Interpolation}
+
+    #Cache
+    B_comp::Vector{T}
+    dB_comp::Matrix{T}
+    dUdξ_temp::Vector{T}
 end
 
 getnquadpoints_ooplane(cv::IGAShellValues) = return length(cv.oqr.weights)
@@ -263,12 +269,12 @@ function _build_shape_values!(cv::IGAShellValues{dim_s,dim_p,T}) where {dim_s,di
     
     #
     U_temp = 0.0
-    dUdξ_temp = fill(0.0, dim_s)
+    dUdξ_temp = fill!(cv.dUdξ_temp, dim_s)# fill(0.0, dim_s)
     #d²Udξ²_temp = fill(0.0, dim_s,dim_s)
 
     #
-    B_comp = fill(0.0, dim_s)
-    dB_comp = fill(0.0, dim_s, dim_s)
+    B_comp = fill!(cv.B_comp, 0.0)# fill(0.0, dim_s)
+    dB_comp = fill!(cv.dB_comp, 0.0)# fill(0.0, dim_s, dim_s)
 
     qp = 0
     basefunc_count = 0
@@ -379,7 +385,7 @@ end
 
 function _reinit_midsurface!(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, coords) where {dim_s,dim_p,T}
 
-    Eₐₐ = zeros(Vec{dim_s,T}, dim_p, dim_p)
+    Eₐₐ = cv.Eₐₐ[iqp] 
     Eₐ = cv.Eₐ[iqp]
 
     for d1 in 1:dim_p
@@ -485,6 +491,7 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
     κ =  [zero(Tensor{2,dim_p,T}) for _ in 1:nqp]
     κᵐ = [zero(Tensor{2,dim_p,T}) for _ in 1:n_inp_qp]
     Eₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
+    Eₐₐ = [zero(MMatrix{dim_p,dim_p,Vec{dim_s,T}}) for _ in 1:n_inp_qp]
     Dₐ = [zero(Triad{dim_s,T}) for _ in 1:n_inp_qp]
 
     max_nbasefunctions = n_midplane_basefuncs*dim_s * sizehint #hardcoded
@@ -497,6 +504,7 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
 
     MM1 = Tensors.n_components(Tensors.get_base(eltype(κ)))
     MM2 = Tensors.n_components(Tensors.get_base(eltype(dUdξ)))
+    LL = dim_p * dim_p
 
     #combine the two quadrature rules
     points = Vec{dim_s,T}[]
@@ -514,8 +522,13 @@ function IGAShellValues(thickness::T, qr_inplane::QuadratureRule{dim_p}, qr_oopl
     #Initalize bezier operator as NaN
     bezier_operator = IGA.bezier_extraction_to_vector(sparse(Diagonal(fill(NaN, n_midplane_basefuncs))))
 
-    return IGAShellValues{dim_s,dim_p,T,MM1,MM2}(inplane_values_bezier, deepcopy(inplane_values_bezier), H, detJdV, detJdA, G, Gᴵ, Eₐ, Dₐ, κ, κᵐ, R, U, dUdξ, Ref(max_nbasefunctions), Ref(bezier_operator), qr, 
-                                                 deepcopy(qr_inplane), deepcopy(qr_ooplane), thickness, mid_ip, oop_ip)
+    #Cache
+    B_comp = zeros(T, dim_s) * NaN
+    dB_comp = zeros(T, dim_s, dim_s) * NaN
+    dUdξ_temp = zeros(T, dim_s) * NaN
+
+    return IGAShellValues{dim_s,dim_p,T,MM1,MM2,LL}(inplane_values_bezier, deepcopy(inplane_values_bezier), H, detJdV, detJdA, G, Gᴵ, Eₐ, Eₐₐ, Dₐ, κ, κᵐ, R, U, dUdξ, Ref(max_nbasefunctions), Ref(bezier_operator), qr, 
+                                                 deepcopy(qr_inplane), deepcopy(qr_ooplane), thickness, mid_ip, oop_ip, B_comp, dB_comp, dUdξ_temp)
 end
 
 function function_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, ue::AbstractVector{T}, Θ::Int, active_dofs::AbstractVector{Int} = 1:length(ue)) where {dim_s,dim_p,T}

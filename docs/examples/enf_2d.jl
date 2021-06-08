@@ -39,7 +39,7 @@ MatTransvLinearElastic(
     G_12 = 8.0e3, 
     α = _α
 ) 
-layermats = [Material2D(material(α), Five.PLANE_STRESS) for α in angles]
+layermats = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles]
 
 #
 nurbsmesh = IgAShell.IGA.generate_nurbs_patch(:line, (NELX, ), (ORDERS[1], ), (L, ), sdim=2) 
@@ -210,6 +210,5 @@ output = solvethis(solver, state, globaldata)
 d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(output.outputdata["reactionforce"].data)]
 
 using Test
-@show d
-@test all( d .≈ [0.0, 0.023551100017999857, 0.047134360028778355, 0.07823472445107986, 0.11927576443187565, 0.17343622364288683, 0.24012521130370895])
+@test all( d .≈ [0.0, 0.02338751818556549, 0.04680709437668935, 0.07562317575918642, 0.11110291014574142, 0.15478795877694868, 0.2085769272688807])
 

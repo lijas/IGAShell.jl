@@ -8,7 +8,7 @@ using LinearAlgebra
 using SparseArrays
 using StaticArrays
 using TimerOutputs
-
+using InteractiveUtils
 """
 EdgeInterfaceIndex
     Specifiying interface on cell.
