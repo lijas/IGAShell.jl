@@ -715,12 +715,15 @@ function _calculate_nonlinear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F, 
     dΩ = getdetJdV(cv,qp)*width
 
     E = symmetric(1/2 * (F' ⋅ F - one(F)))
-    #Ê = symmetric(R' ⋅ E ⋅ R)
+    Ê = symmetric(R' ⋅ E ⋅ R)
 
-    S, ∂S∂E, new_matstate = Five.constitutive_driver(material[ilay], E, materialstates[layer_qp])
+    _S, _∂S∂E, new_matstate = Five.constitutive_driver(material[ilay], Ê, materialstates[layer_qp])
     materialstates[layer_qp] = new_matstate
 
-    σ = inv(det(F)) * F ⋅ S ⋅ F'
+    ∂S∂E = otimesu(R,R) ⊡ _∂S∂E ⊡ otimesu(R',R')
+    S = R⋅_S⋅R'
+
+    #σ = inv(det(F)) * F ⋅ S ⋅ F'
 
     # Hoist computations of δE
     for i in 1:ndofs_layer
