@@ -120,7 +120,9 @@ etf = IGAShellWeakBC(
 push!(data.constraints, etf)
 
 #Force
-midvertex = collect(getvertexset(data.grid, "mid"))[2]
+# Note, need to sort set, becuase Sets seems to be a bit random.
+midvertex =  getvertexset(data.grid, "mid") |> collect |> x -> sort(x, by = x->first(x)) |> x->last(x)
+
 edgeset = VertexInterfaceIndex([midvertex], 2)
 etf = IGAShellExternalForce(
     set = edgeset, 
@@ -208,5 +210,6 @@ output = solvethis(solver, state, globaldata)
 d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(output.outputdata["reactionforce"].data)]
 
 using Test
+@show d
 @test all( d .≈ [0.0, 0.023551100017999857, 0.047134360028778355, 0.07823472445107986, 0.11927576443187565, 0.17343622364288683, 0.24012521130370895])
 
