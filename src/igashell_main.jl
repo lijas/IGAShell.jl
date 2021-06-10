@@ -1,9 +1,14 @@
 export IGAShellState, IGAShell
 
-struct IGAShellCache2{dim_s,T,M}
+struct IGAShellCacheSolid{dim_s,T,M}
     δF::Vector{Tensor{2,dim_s,T,M}}
     δɛ::Vector{Tensor{2,dim_s,T,M}}
     g::Vector{Vec{dim_s,T}}
+end
+
+struct IGAShellCacheInterface{dim_s,T}
+    g₊::Vector{Vec{dim_s,T}}
+    g₋::Vector{Vec{dim_s,T}}
 end
 
 struct IGAShellCache{dim_s,T,M}
@@ -18,9 +23,11 @@ struct IGAShellCache{dim_s,T,M}
     ike::Matrix{T}
     
     ue::Vector{T}
+    ue_layer::Vector{T}
     ue_interface::Vector{T}
 
-    cache2::IGAShellCache2{dim_s,T,M}
+    cache2::IGAShellCacheSolid{dim_s,T,M}
+    cache3::IGAShellCacheInterface{dim_s,T}
 end
 
 function IGAShellCache(data::IGAShellData{dim_p,dim_s,T})  where {dim_p,dim_s,T}
@@ -34,23 +41,28 @@ function IGAShellCache(data::IGAShellData{dim_p,dim_s,T})  where {dim_p,dim_s,T}
     Xᵇ = similar(X)
     celldofs = zeros(Int, ndofs)
     fe = zeros(T, ndofs)
-    ke = zeros(T, ndofs)
+    ke = zeros(T, ndofs, ndofs)
     ife = similar(fe)
     ike = similar(ke)
 
     ue = zeros(T, ndofs)
+    ue_layer = zeros(T, ndofs)
     ue_interface = zeros(T, ndofs)
 
     δF = zeros(Tensor{2,dim_s,T,dim_s^2}, ndofs_layer)
     δɛ = zeros(Tensor{2,dim_s,T,dim_s^2}, ndofs_layer)
     g  = zeros(Vec{dim_s,T}, dim_s)
-    c2 = IGAShellCache{dim_s,T,M}(δF, δɛ, g)
+    c2 = IGAShellCacheSolid(δF, δɛ, g)
 
-    return IGAShellCache(cellnodes, X, Xᵇ, celldofs, fe, ke, ife, ike, ue, ue_interface, c2)
+    g1  = zeros(Vec{dim_s,T}, dim_s-1)
+    g2  = zeros(Vec{dim_s,T}, dim_s-1)
+    c3 = IGAShellCacheInterface(g1, g2)
+
+    return IGAShellCache(cellnodes, X, Xᵇ, celldofs, fe, ke, ife, ike, ue, ue_layer, ue_interface, c2, c3)
 
 end
 
-function resize_cache2!(c::IGAShellCache2, n::Int)
+function resize_cache2!(c::IGAShellCacheSolid, n::Int)
     resize!(c.δɛ, n)
     resize!(c.δF, n)
     resize!(c.g, n)
@@ -396,14 +408,20 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
 
     assembler = start_assemble(state.system_arrays.Kⁱ, state.system_arrays.fⁱ, fillzero=false)  
 
-    nnodes = Ferrite.nnodes_per_cell(igashell)
     X = igashell.cache.X
     Xᵇ = igashell.cache.Xᵇ
+    ue = igashell.cache.ue
+    fe = igashell.cache.fe
+    ife = igashell.cache.ife
+    ue_layer = igashell.cache.ue_layer
+    ue_interface = igashell.cache.ue_interface
+    ue = igashell.cache.ue
+    celldofs = igashell.cache.celldofs
 
     nqp_oop_per_layer = getnquadpoints_ooplane_per_layer(igashell)
 
     Δt = state.Δt
-
+    
     V = 0
     @timeit "Shell loop" for (ic, cellid) in enumerate(igashell.cellset)
         cellstate = getcellstate(adapdata(igashell), ic)
@@ -414,44 +432,45 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
         IGA.set_bezier_operator!(cv, Ce)
 
         ndofs = Ferrite.ndofs_per_cell(dh, cellid)
-        celldofs = resize!(igashell.cache.celldofs, ndofs)
+        resize!(celldofs, ndofs)
+        resize!(ue, ndofs)
 
         Ferrite.cellcoords!(X, dh, cellid)
         Ferrite.celldofs!(celldofs, dh, cellid)
-        
-        ue = disassemble!(igashell.cache.ue, state.d, celldofs)
 
-        Xᵇ .= IGA.compute_bezier_points(Ce, X)
+        disassemble!(ue, state.d, celldofs)
+
+        IGA.compute_bezier_points!(Xᵇ, Ce, X)
         @timeit "reinit1" reinit!(cv, Xᵇ)
 
         materialstates = state.partstates[ic].materialstates
 
-        for ilay in 1:nlayers(igashell)
+        @timeit "layers" for ilay in 1:nlayers(igashell)
             active_dofs = active_layer_dofs[ilay]
-
-            ue_layer = ue[active_dofs]
             ndofs_layer = length(active_dofs)
+            
+            resize!(ue_layer, ndofs_layer)
+            disassemble!(ue_layer, ue, active_dofs) 
 
-            fe = resize!(igashell.cache.fe, ndofs_layer)
+            resize!(fe, ndofs_layer)
             fill!(fe, 0.0)
 
             ke = zeros(T, ndofs_layer, ndofs_layer)
 
-
             states = @view materialstates[:, ilay]
 
+            resize_cache2!(igashell.cache.cache2, ndofs_layer)
+
             if assemtype == IGASHELL_STIFFMAT
-                resize_cache!(igashell.cache, ndofs_layer)
                 @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
                                                     cv, 
                                                     ke, fe, 
                                                     getmaterial(layerdata(igashell)), states, 
                                                     ue_layer, ilay, nlayers(igashell), active_dofs, 
-                                                    is_small_deformation_theory(layerdata(igashell)), IGASHELL_STIFFMAT, getwidth(layerdata(igashell)), igashell.cache)
+                                                    is_small_deformation_theory(layerdata(igashell)), IGASHELL_STIFFMAT, getwidth(layerdata(igashell)), igashell.cache.cache2)
                 
                 assemble!(assembler, celldofs[active_dofs], ke, fe)
             elseif assemtype == IGASHELL_FSTAR
-                resize_cache!(igashell.cache, ndofs_layer)
                 ⁿmaterialstates = state.prev_partstates[ic].materialstates
                 ⁿstates =  @view ⁿmaterialstates[:, ilay]
                 @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
@@ -459,7 +478,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                                         ke, fe, 
                                         getmaterial(layerdata(igashell)), ⁿstates, 
                                         ue_layer, ilay, nlayers(igashell), active_dofs, 
-                                        is_small_deformation_theory(layerdata(igashell)), IGASHELL_FSTAR, getwidth(layerdata(igashell)), igashell.cache)
+                                        is_small_deformation_theory(layerdata(igashell)), IGASHELL_FSTAR, getwidth(layerdata(igashell)), igashell.cache.cache2)
 
                 state.system_arrays.fᴬ[celldofs[active_dofs]] += fe
 
@@ -479,10 +498,8 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
 
         end
     end
-    
-    
-    icoords = zeros(Vec{dim_s,T}, nnodes*2)    
-    A = 0.0
+      
+    ike = zeros(T, 72, 72)
     @timeit "Interface loop" for (ic, cellid) in enumerate(igashell.cellset)
 
         cellstate = getcellstate(adapdata(igashell), ic)
@@ -491,9 +508,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
             continue
         end
         
-        cv_cohesive_top, 
-        cv_cohesive_bot = build_cohesive_cellvalue!(igashell, ic) 
-
+        cv_cohesive_top, cv_cohesive_bot = build_cohesive_cellvalue!(igashell, ic) 
         active_interface_dofs = build_active_interface_dofs(igashell, cellstate)
 
         interfacestates = state.partstates[ic].interfacestates
@@ -506,33 +521,38 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
         
         Ce = get_extraction_operator(intdata(igashell), ic)
 
-        Xᵇ .= IGA.compute_bezier_points(Ce, X)
+        IGA.compute_bezier_points!(Xᵇ, Ce, X)
         
-        ue = state.d[celldofs]
+        resize!(ue, ndofs)
+        disassemble!(ue, state.d, celldofs) 
+        
+        IGA.set_bezier_operator!(cv_cohesive_top, Ce)
+        IGA.set_bezier_operator!(cv_cohesive_bot, Ce)
+
+        @timeit "reinit1" reinit!(cv_cohesive_top, Xᵇ)
+        @timeit "reinit1" reinit!(cv_cohesive_bot, Xᵇ)
 
         for iint in 1:ninterfaces(igashell)      
-
-            active_dofs = 1:Ferrite.ndofs_per_cell(dh,ic)# active_interface_dofs[iint]
             
             if !is_interface_active(cellstate, iint)
                 continue
             end
             
             states = @view interfacestates[:, iint]
-            
-            IGA.set_bezier_operator!(cv_cohesive_top, Ce)
-            IGA.set_bezier_operator!(cv_cohesive_bot, Ce)
 
-            ue_interface = @view ue[active_dofs]
+            active_dofs = active_interface_dofs[iint] #1:Ferrite.ndofs_per_cell(dh,ic)#
+            ndofs_interface = length(active_dofs)
 
-            ife = zeros(T, length(active_dofs))
-            ike = zeros(T, length(active_dofs), length(active_dofs))  
-            
-            @timeit "reinit1" reinit!(cv_cohesive_top, Xᵇ)
-            @timeit "reinit1" reinit!(cv_cohesive_bot, Xᵇ)
+            resize!(ue_interface, ndofs_interface)
+            disassemble!(ue_interface, ue, active_dofs) 
+
+            resize!(ife, ndofs_interface)
+            fill!(ife, 0.0)
+
+            ike = zeros(T, ndofs_interface, ndofs_interface)  
 
             if assemtype == IGASHELL_STIFFMAT
-            @timeit "integrate_cohesive" A += integrate_cohesive_forcevector_and_stiffnessmatrix!(
+                @timeit "integrate_cohesive" integrate_cohesive_forcevector_and_stiffnessmatrix!(
                                                         cv_cohesive_top, cv_cohesive_bot,
                                                         interface_material(igashell), 
                                                         states,
@@ -541,7 +561,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                                                         
                                                         Δt,
                                                         iint, ninterfaces(igashell),
-                                                        active_dofs, getwidth(layerdata(igashell))) 
+                                                        active_dofs, getwidth(layerdata(igashell)), igashell.cache.cache3) 
                 assemble!(assembler, celldofs[active_dofs], ike, ife)
             elseif assemtype == IGASHELL_FSTAR
                 ⁿinterfacestates = state.prev_partstates[ic].interfacestates
@@ -556,7 +576,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                                                              
                                                             Δt,
                                                             iint, ninterfaces(igashell),
-                                                            active_dofs, getwidth(layerdata(igashell))) 
+                                                            active_dofs, getwidth(layerdata(igashell)), igashell.cache.cache3) 
                     state.system_arrays.fᴬ[celldofs[active_dofs]] += ife
             elseif assemtype == IGASHELL_DISSIPATION
                 ge = Base.RefValue(zero(T))
@@ -569,27 +589,12 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                                                              
                                                             Δt,
                                                             iint, ninterfaces(igashell),
-                                                            active_dofs, getwidth(layerdata(igashell))) 
+                                                            active_dofs, getwidth(layerdata(igashell)), igashell.cache.cache3) 
                 state.system_arrays.G[] += ge[]
                 state.system_arrays.fᴬ[celldofs[active_dofs]] += ife
             else
                 error("wrong option")
             end
-
-            #=F!(ife, ike, u, ⁿms, ms) = integrate_cohesive_forcevector_and_stiffnessmatrix!(
-                cv_cohesive_top, cv_cohesive_bot,
-                interface_material(igashell), 
-                ⁿms, ms,
-                copy(ike), ife,
-                u, 
-                iint, ninterfaces(igashell),
-                active_dofs, getwidth(layerdata(igashell))) 
-
-                
-            ife , ike = numdiff(F!, ue_interface, ⁿmaterialstates, materialstates)=#
-            
-            #=if !isapprox(norm(ike), norm(ike2), atol = 1e-0)
-            end=#
             
         end
     end  
@@ -655,7 +660,7 @@ function _get_layer_forcevector_and_stiffnessmatrix!(
                                 ke::AbstractMatrix, fe::AbstractVector,
                                 material, materialstate, 
                                 ue_layer::AbstractVector{T}, ilay::Int, nlayers::Int, active_dofs::Vector{Int}, 
-                                is_small_deformation_theory::Bool, calculate_what::IGASHELL_ASSEMBLETYPE, width::T, cache::IGAShellCache{dim_s,T}) where {dim_s,dim_p,T}
+                                is_small_deformation_theory::Bool, calculate_what::IGASHELL_ASSEMBLETYPE, width::T, cache::IGAShellCacheSolid{dim_s,T}) where {dim_s,dim_p,T}
                                 
     ndofs_layer = length(active_dofs)
 
@@ -823,7 +828,7 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
     ue::AbstractVector,
     Δt::T,
     iint::Int, ninterfaces::Int,
-    active_dofs::AbstractVector{Int}, width::T,
+    active_dofs::AbstractVector{Int}, width::T, cache::IGAShellCacheInterface{dim_s,T}
     ) where {dim_s,dim_p,T}
     
     ndofs = length(active_dofs)
@@ -833,7 +838,7 @@ function integrate_cohesive_forcevector_and_stiffnessmatrix!(
     for qp in (1:getnquadpoints_inplane(cv_top)) .+ qp_offset
         
         #Rotation matrix
-        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs)
+        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs, cache.g₊, cache.g₋)
         dΓ *= width
         A += dΓ
         
@@ -886,7 +891,7 @@ function integrate_cohesive_fstar!(
     ue::AbstractVector,
     Δt::T,
     iint::Int, ninterfaces::Int,
-    active_dofs::AbstractVector{Int}, width::T,
+    active_dofs::AbstractVector{Int}, width::T, cache::IGAShellCacheInterface{dim_s,T}
     ) where {dim_s,dim_p,T}
     
     ndofs = length(active_dofs)
@@ -895,7 +900,7 @@ function integrate_cohesive_fstar!(
     for qp in (1:getnquadpoints_inplane(cv_top)) .+ qp_offset
         
         #Rotation matrix
-        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs)
+        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs, cache.g₊, cache.g₋)
         dΓ *= width
         
         u₊ = zero(Vec{dim_s,T}); u₋ = zero(Vec{dim_s,T}) 
@@ -935,7 +940,7 @@ function integrate_dissipation!(
     ue::AbstractVector,
     Δt::T,
     iint::Int, ninterfaces::Int,
-    active_dofs::AbstractVector{Int}, width::T,
+    active_dofs::AbstractVector{Int}, width::T, cache::IGAShellCacheInterface{dim_s,T}
     ) where {dim_s,dim_p,T}
     
     ndofs = length(active_dofs)
@@ -945,7 +950,7 @@ function integrate_dissipation!(
     for qp in (1:getnquadpoints_inplane(cv_top)) .+ qp_offset
         
         #Rotation matrix
-        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs)
+        R, dΓ = _cohesvive_rotation_matrix!(cv_top, cv_bot, qp, ue, active_dofs, cache.g₊, cache.g₋)
         dΓ *= width
         
         u₊ = zero(Vec{dim_s,T}); u₋ = zero(Vec{dim_s,T}) 
@@ -976,11 +981,11 @@ function _cohesvive_rotation_matrix!(cv_top::IGAShellValues{dim_s,dim_p,T},
                                      cv_bot::IGAShellValues{dim_s,dim_p,T}, 
                                      qp::Int,
                                      ue::AbstractVector{T},
-                                     active_dofs::AbstractVector{Int}) where {dim_p,dim_s,T}
+                                     active_dofs::AbstractVector{Int}, 
+                                     g₊::Vector{Vec{dim_s,T}}, 
+                                     g₋::Vector{Vec{dim_s,T}}) where {dim_p,dim_s,T}
 
 
-    g₊ = zeros(Vec{dim_s,T},dim_p)
-    g₋ = zeros(Vec{dim_s,T},dim_p)
     for d in 1:dim_p
         g₊[d] = cv_top.G[qp][d] + function_parent_derivative(cv_top, qp, ue, d, active_dofs)
         g₋[d] = cv_bot.G[qp][d] + function_parent_derivative(cv_bot, qp, ue, d, active_dofs)
