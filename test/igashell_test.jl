@@ -450,7 +450,46 @@ end
     (IgAShell.get_active_basefunctions_in_interface(2, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [5,6]) |> all
     (IgAShell.get_active_basefunctions_in_interface(3, order, IgAShell.STRONG_DISCONTINIUOS_AT_INTERFACE_CPSTATE((2,3,))) .== [8,9]) |> all
 end
+#=
+function _get_igashellvalues(nlayers, cellstate)
 
+    zcoords = range(-1.0, stop=1.0, length = nlayers+1)
+    thickness = 1.0
+    iqr = QuadratureRule{1,RefCube}(3)
+    oqr = Five.generate_ooplane_quadraturerule(T, zcoords, nqp_per_layer = 2)
+    mid_ip = IGA.BernsteinBasis{1,(2,)}()
+
+    cell_values = IGAShellValues(thickness, iqr, oqr, mid_ip, 10)
+    
+    a = BasisValues(qr_cell_oop, ip_lumped) 
+    b = BasisValues(qr_cell_oop, ip_layered) 
+    c = BasisValues(qr_cell_oop, ip_discont)
+
+    for i in 1:nnodes_inplane
+        cp_state = get_cpstate(cellstate, i)
+
+    end
+    set_oop_basefunctions!(cell_values, oop_values)
+
+end
+
+@testset "active interface dofs" begin
+
+
+    cellstate =  IgAShell.CELLSTATE(IgAShell._MIXED, [IgAShell.LUMPED_CPSTATE, IgAShell.LUMPED_CPSTATE , IgAShell.FULLY_DISCONTINIUOS_CPSTATE])
+    order = 2
+    dim_s = 2
+    ninterfaces = 2
+    ninplanebf = 3
+    IgAShell.generate_active_interface_dofs(ninterfaces, order, dim_s, ninplanebf, cellstate)
+
+    thickness = 1.0
+    iqr = QuadratureRule{1,RefCube}(3)
+    oqr = Five.generate_ooplane_quadraturerule(T, data.zcoords, nqp_per_layer = data.nqp_ooplane_per_layer)
+
+    cell_values = IGAShellValues(thickness, iqr, oqr,  mid_ip, getnbasefunctions(ip_discont))
+end
+=#
 @testset "stiffness_matrix_lumped" begin
     state, globaldata = get_test_mesh(IgAShell.LUMPED, 1, 0.0)
 
