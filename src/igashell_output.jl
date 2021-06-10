@@ -262,8 +262,13 @@ IGAShellConfigStateOutput
 
 struct IGAShellConfigStateOutput <: Five.AbstractOutput end
 
+Five.outputname(o::IGAShellConfigStateOutput) = "ElementState"
+
 @Base.kwdef struct IGAShellMaterialStateOutput <: Five.AbstractOutput 
     field::Symbol
     dir::Int = 1
 end
+
+
+Five.outputname(o::IGAShellMaterialStateOutput) = string(o.field)
 
