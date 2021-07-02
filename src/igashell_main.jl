@@ -641,8 +641,8 @@ end
 function _post_layered(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::Int)
 
     #Shape values for evaluating stresses at center of cell
-    cv_mid_interface = deepcopy(igashell.integration_data.cell_values_mid_interface)
-    set_bezier_operator!(cv_mid_interface_sr, Ce)
+    cv_mid_interface = igashell.integration_data.cell_value_mid_interfaces
+    set_bezier_operator!(cv_mid_interface, Ce)
     
     #oop_values = _build_oop_basisvalue!(igashell, cellstate)
     #set_oop_basefunctions!(cv_mid_interface, oop_values)
@@ -657,9 +657,9 @@ function _post_layered(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::In
         ue_layer = ue[active_dofs]
         
         #Only one quad points per layer 
-        σ, _, _ = _eval_stress_center(cv_mid_interface, igashell.layerdata.layer_materials[ilay], iqp, Xᵇ, ue_layer, active_dofs, igashell.layerdata.small_deformations)
+        σ, _, _ = _eval_stress_center(cv_mid_interface, igashell.layerdata.layer_materials[ilay], iqp, Xᵇ, ue_layer, active_dofs, is_small_deformation_theory(igashell.layerdata))
 
-        igashell.integration_data.interfacestresses[ic, ilay] = σ
+        igashell.integration_data.interfacestresses[ilay, ic] = σ
     end
 end
 

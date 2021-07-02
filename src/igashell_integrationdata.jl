@@ -231,7 +231,7 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     cache = CachedOOPBasisValues(oqr, oqr_cohesive, oqr_face, iqr_sides, iqr_vertices, 
                                  mid_ip, ip_lumped, ip_layered, ip_discont, 
                                  ninterfaces(data), order, dim_s)
-    interfacestresses = zeros(SymmetricTensor{2,3,T,6}, getncells(data), ninterfaces(data)) 
+    interfacestresses = zeros(SymmetricTensor{2,3,T,6}, ninterfaces(data), getncells(data)) 
 
     cell_values = IGAShellValues(data.thickness, iqr, oqr,  mid_ip, getnbasefunctions(ip_discont))
     face_values = IGAShellValues(data.thickness, iqr, oqr_face[1],  mid_ip, getnbasefunctions(ip_discont))
@@ -264,8 +264,8 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
 
     #
     oop_ip = [ip_layered for i in 1:getnbasefunctions(mid_ip)]
-    cell_values_mid_interface = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr_cohesive[1], mid_ip, getnbasefunctions(cache.ip_layered), oop_ip)
-    set_oop_basefunctions!(cell_values_mid_interface, cache.basis_values_layered)
+    cell_values_mid_interface = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr_cohesive[1], mid_ip, getnbasefunctions(ip_layered), oop_ip)
+    set_oop_basefunctions!(cell_values_mid_interface, cache.basis_cohesive_layered[1])
 
     ###
     # Cohesive data
