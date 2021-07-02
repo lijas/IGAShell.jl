@@ -39,7 +39,7 @@ MatTransvLinearElastic(
     G_12 = 8.0e3, 
     α = _α
 ) 
-layermats = [Material2D(material(α), Five.PLANE_STRESS) for α in angles]
+layermats = [Material2D(material(α), Five.PLANE_STRAIN) for α in angles]
 
 #
 nurbsmesh = IgAShell.IGA.generate_nurbs_patch(:line, (NELX, ), (ORDERS[1], ), (L, ), sdim=2) 
@@ -197,7 +197,7 @@ solver = LocalDissipationSolver(
     sw2i         = 1e-7,
     optitr       = 8,
     maxitr       = 50,
-    maxsteps     = 5,
+    maxsteps     = 10,
     λ_max        = 400.0,
     λ_min        = -100.0,
     tol          = 1e-4,
@@ -211,5 +211,4 @@ d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(
 
 using Test
 @show d
-@test all( d .≈ [0.0, 0.023551100017999857, 0.047134360028778355, 0.07823472445107986, 0.11927576443187565, 0.17343622364288683, 0.24012521130370895])
-
+@test all( d .≈ [0.0, 0.02338751818556549, 0.04680709437668935, 0.07562317575918642, 0.11110291014574142, 0.15478795877694868, 0.2085769272688807, 0.2748080743411429, 0.35649670178035764, 0.45053668476752784, 0.545020523949584, 0.6396524450324756])
