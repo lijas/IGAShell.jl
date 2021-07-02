@@ -272,4 +272,3 @@ end
 
 Five.outputname(o::IGAShellMaterialStateOutput) = string(o.field)
 
-

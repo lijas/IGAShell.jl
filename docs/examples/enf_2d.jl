@@ -210,5 +210,4 @@ output = solvethis(solver, state, globaldata)
 d = [output.outputdata["reactionforce"].data[i].displacements for i in 1:length(output.outputdata["reactionforce"].data)]
 
 using Test
-@show d
 @test all( d .≈ [0.0, 0.02338751818556549, 0.04680709437668935, 0.07562317575918642, 0.11110291014574142, 0.15478795877694868, 0.2085769272688807, 0.2748080743411429, 0.35649670178035764, 0.45053668476752784, 0.545020523949584, 0.6396524450324756])
