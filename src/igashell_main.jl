@@ -401,6 +401,11 @@ function Five.assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDof
     _assemble_stiffnessmatrix_and_forcevector!(dh, igashell, state, IGASHELL_STIFFMAT)
 end
 
+
+function Five.assemble_massmatrix!(dh::Ferrite.AbstractDofHandler, part::IGAShell, state::StateVariables)
+    return nothing
+end
+
 function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHandler, 
                                                      igashell::IGAShell{dim_p,dim_s,T},  
                                                      state::StateVariables, 
@@ -611,17 +616,9 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
     for (ic,cellid) in enumerate(igashell.cellset)#enumerate(CellIterator(dh, igashell.cellset))
         
         cellstate = getcellstate(adapdata(igashell), ic)
-
-        if !is_lumped(cellstate) && !is_layered(cellstate)
-            continue
-        end
-
         #Get cellvalues for cell
         Ce = get_extraction_operator(intdata(igashell), ic)
-        
-        #Extract stresses from states
-        σ_states = states.partstates[ic].materialstates[:]
-        σ_states = getproperty.(σ_states, :σ)
+
         #Data for cell
         _celldofs = celldofs(dh, cellid)
         ue = states.d[_celldofs]
@@ -629,27 +626,69 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         nnodes = Ferrite.nnodes_per_cell(igashell)
         X = zeros(Vec{dim_s,T}, nnodes)
         Ferrite.cellcoords!(X, dh, cellid)
-        Xᵇ= IGA.compute_bezier_points(Ce, X)
-        celldata = (celldofs = _celldofs, 
-                    Xᵇ=Xᵇ, X=X, ue=ue, 
-                    nlayers=nlayers(igashell), ninterfaces=ninterfaces(igashell), 
-                    cellid=cellid, ic=ic)
+        Xᵇ = IGA.compute_bezier_points(Ce, X)
 
-        #Build basis_values for cell
-        cv = build_cellvalue!(igashell, cellstate)
-        IGA.set_bezier_operator!(cv, Ce)
-        reinit!(cv, Xᵇ)
+        if is_lumped(cellstate)
+            _post_lumped(igashell, Xᵇ, X, ue, Ce, cellstate, ic, cellid)
+        elseif is_layered(cellstate)
+            _post_layered(igashell, Xᵇ, X, ue, Ce, cellstate, ic, cellid)
+        else
+            continue
+        end
 
-        #Build basis_values for stress_recovory
-        cv_sr = intdata(igashell).cell_values_sr
-        oop_values = _build_oop_basisvalue!(igashell, cellstate)
-        set_oop_basefunctions!(cv_sr, oop_values)
-        IGA.set_bezier_operator!(cv_sr, Ce)
-        reinit!(cv_sr, Xᵇ)
-
-        recover_cell_stresses(srdata(igashell), σ_states, celldata, cv_sr, cv)
     end
 
+end
+
+function _post_layered(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::Int)
+
+    #Shape values for evaluating stresses at center of cell
+    cv_mid_interface = deepcopy(igashell.integration_data.cell_values_mid_interface)
+    set_bezier_operator!(cv_mid_interface_sr, Ce)
+    
+    #oop_values = _build_oop_basisvalue!(igashell, cellstate)
+    #set_oop_basefunctions!(cv_mid_interface, oop_values)
+    
+    reinit!(cv_mid_interface, Xᵇ)
+    active_layer_dofs = build_active_layer_dofs(igashell, cellstate)
+
+    iqp = 0
+    for ilay in 1:nlayers(igashell)-1
+        iqp += 1
+        active_dofs = active_layer_dofs[ilay]
+        ue_layer = ue[active_dofs]
+        
+        #Only one quad points per layer 
+        σ, _, _ = _eval_stress_center(cv_mid_interface, igashell.layerdata.layer_materials[ilay], iqp, Xᵇ, ue_layer, active_dofs, igashell.layerdata.small_deformations)
+
+        igashell.integration_data.interfacestresses[ic, ilay] = σ
+    end
+end
+
+function _post_lumped(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::Int)
+
+    #Extract stresses from states
+    σ_states = states.partstates[ic].materialstates[:]
+    σ_states = getproperty.(σ_states, :σ)
+
+    celldata = (Xᵇ=Xᵇ, X=X, ue=ue, 
+                nlayers=nlayers(igashell), ninterfaces=ninterfaces(igashell), 
+                cellid=cellid, ic=ic)
+
+    #Build basis_values for cell
+    cv = build_cellvalue!(igashell, cellstate)
+    IGA.set_bezier_operator!(cv, Ce)
+    reinit!(cv, Xᵇ)
+
+    #Build basis_values for stress_recovory
+    cv_sr = intdata(igashell).cell_values_sr
+    oop_values = _build_oop_basisvalue!(igashell, cellstate)
+    set_oop_basefunctions!(cv_sr, oop_values)
+    IGA.set_bezier_operator!(cv_sr, Ce)
+    reinit!(cv_sr, Xᵇ)
+
+    recover_cell_stresses(srdata(igashell), σ_states, celldata, cv_sr, cv)
+    
 end
 
 function _get_layer_forcevector_and_stiffnessmatrix!(

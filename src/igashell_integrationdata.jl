@@ -117,7 +117,7 @@ struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
     cell_values_interface::ISV
     cell_values_vertices::ISV
 
-    active_cell_values::Base.RefValue{ISV}
+    cell_value_mid_interfaces::ISV #For getting stress at interface
 
     iqr::QuadratureRule{dim_p,RefCube,T}
     oqr::QuadratureRule{1,RefCube,T}
@@ -128,6 +128,7 @@ struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
     qr_vertices::Array{QuadratureRule{dim_p,RefCube,T}, 1}
 
     cache_values::CachedOOPBasisValues{dim_p,T,M}
+    interfacestresses::Array{SymmetricTensor{2,3,Float64,6},2} #rows: cells,  cols: stress on interface/qp
 
     extraction_operators::Vector{IGA.BezierExtractionOperator{T}}
     oop_order::Int
@@ -230,6 +231,7 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     cache = CachedOOPBasisValues(oqr, oqr_cohesive, oqr_face, iqr_sides, iqr_vertices, 
                                  mid_ip, ip_lumped, ip_layered, ip_discont, 
                                  ninterfaces(data), order, dim_s)
+    interfacestresses = zeros(SymmetricTensor{2,3,T,6}, getncells(data), ninterfaces(data)) 
 
     cell_values = IGAShellValues(data.thickness, iqr, oqr,  mid_ip, getnbasefunctions(ip_discont))
     face_values = IGAShellValues(data.thickness, iqr, oqr_face[1],  mid_ip, getnbasefunctions(ip_discont))
@@ -260,6 +262,11 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     cell_values_sr = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr, mid_ip, getnbasefunctions(cache.basis_values_discont), oop_ip)
     set_oop_basefunctions!(cell_values_sr, initial_basis_values)
 
+    #
+    oop_ip = [ip_layered for i in 1:getnbasefunctions(mid_ip)]
+    cell_values_mid_interface = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr_cohesive[1], mid_ip, getnbasefunctions(cache.ip_layered), oop_ip)
+    set_oop_basefunctions!(cell_values_mid_interface, cache.basis_values_layered)
+
     ###
     # Cohesive data
     cell_values_cohesive_top = IGAShellValues(data.thickness, iqr_inp_cohesive, oqr_cohesive[2], mid_ip, getnbasefunctions(ip_discont))
@@ -272,10 +279,9 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
         cell_values_sr,
         cell_values_cohesive_top, cell_values_cohesive_bot,
         face_values, side_values, interface_values, vertices_values,
-        #cell_values_face_top, cell_values_face_bot,
-        Ref(cell_values), #Ref(face_values),
+        cell_values_mid_interface,
         iqr, oqr, iqr_inp_cohesive, oqr_face, oqr_cohesive, iqr_sides, iqr_vertices,
-        cache,
+        cache, interfacestresses,
         C, order)
 end
 
