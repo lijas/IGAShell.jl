@@ -422,7 +422,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
 
     Δt = state.Δt
     
-    V = 0
     @timeit "Shell loop" for (ic, cellid) in enumerate(igashell.cellset)
         cellstate = getcellstate(adapdata(igashell), ic)
         cv = build_cellvalue!(igashell, cellstate)
@@ -499,7 +498,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
         end
     end
       
-    ike = zeros(T, 72, 72)
     @timeit "Interface loop" for (ic, cellid) in enumerate(igashell.cellset)
 
         cellstate = getcellstate(adapdata(igashell), ic)
@@ -601,7 +599,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
 
 end
 
-function assemble_massmatrix!( dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, system_arrays::SystemArrays) where {dim_p,dim_s,T}
+function Five.assemble_massmatrix!( dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, system_arrays::SystemArrays) where {dim_p,dim_s,T}
 
 
 end
