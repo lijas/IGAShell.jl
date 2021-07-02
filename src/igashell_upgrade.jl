@@ -52,7 +52,7 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
 
         cellstate = getcellstate(adapdata(igashell), ic)
         recovory_stress_data = @view srdata(igashell).recovered_stresses[:,ic]
-        constitutive_stress_data = state.partstates[ic].materialstates
+        constitutive_stress_data = @view igashell.integration_data.interfacestresses[:,ic]#state.partstates[ic].materialstates
 
         _should_upgrade, upgrade_to = determine_upgrade(igashell, recovory_stress_data, constitutive_stress_data, cellstate)
 
@@ -156,7 +156,7 @@ end
 
 function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T}, 
                            recovory_stress_data::AbstractVector{<:RecoveredStresses}, 
-                           constitutive_stress_data::AbstractMatrix{<:Five.AbstractMaterialState}, 
+                           constitutive_stress_data::AbstractVector{SymmetricTensor{2,3,Float64,6}}, 
                            cellstate::CELLSTATE) where {dim_p, dim_s, T}
 
     is_fully_discontiniuos(cellstate) && return false, nothing
@@ -184,7 +184,7 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
         if is_lumped(cellstate)
             σᶻˣ, σᶻʸ, σᶻᶻ = _get_interface_stress_lumped(recovory_stress_data, iint, nqp_oop_per_layer)
         else
-            σᶻˣ, σᶻʸ, σᶻᶻ = _get_interface_stress_layered(constitutive_stress_data, iint, nqp_oop_per_layer, nqp_inp, dim_p)
+            σᶻˣ, σᶻʸ, σᶻᶻ = _get_interface_stress_layered(constitutive_stress_data, iint)
         end
         
 
@@ -200,13 +200,9 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
     return cell_upgraded, new_cellstate
 end
 
-function _get_interface_stress_layered(materialstates::AbstractMatrix{<:Five.AbstractMaterialState}, iint, nqp_oop_per_layer, nqpinplane, dim_p)
+function _get_interface_stress_layered(materialstates::AbstractVector{SymmetricTensor{2,3,Float64,6}}, iint)
 
-    #Avrage stress beween layers
-    idx1 = stress_interface_index(nqp_oop_per_layer, nqpinplane, dim_p)
-    idx2 = stress_interface_index(1, nqpinplane, dim_p)
-    σ = (materialstates[idx2, iint+1].σ + materialstates[idx1, iint].σ)/2
-
+    σ = materialstates[iint]
     #Use dim_p to make to code work in both 2d and 3d
     return σ[1,3], σ[2,3], σ[3,3]
 end

@@ -114,20 +114,21 @@ function _eval_stress_center(cv::IGAShellValues{dim_s,dim_p,T}, material, qp, X�
     if small_deformation_theroy
         ɛ = symmetric(F) - one(SymmetricTensor{2,dim_s})
         _̂ε = symmetric(R' ⋅ ɛ ⋅ R)
-        _̂σ, ∂̂σ∂ɛ, new_matstate = Five.constitutive_driver(material, _̂ε, matstate)
+        _̂σ, ∂̂σ∂ɛ, _ = Five.constitutive_driver(material, _̂ε, matstate)
     else
-        U = sqrt(tdot(F))
         E = symmetric(1/2 * (F' ⋅ F - one(F)))
-        S, ∂S∂E, new_matstate = Five.constitutive_driver(material, E, matstate)
-        _̂σ = inv(det(F)) * U ⋅ S ⋅ U
+        S, ∂S∂E, _ = Five.constitutive_driver(material, E, matstate)
+        σ = symmetric(inv(det(F)) * F ⋅ S ⋅ F')
+        _̂σ = symmetric(R' ⋅ σ ⋅ R)
     end
     
     if dim_s == 2
+        σ = SymmetricTensor{2,3}((_̂σ[1,1], 0.0, _̂σ[2,1], NaN, 0.0, _̂σ[2,2]))
         x_glob = Vec{3}((x_glob[1], 0.0, x_glob[2]))
         x_loc = Vec{3}((x_loc[1], 0.0, x_loc[2]))
     end
 
-    return new_matstate.σ, x_glob, x_loc
+    return σ, x_glob, x_loc
 end
 
 """
