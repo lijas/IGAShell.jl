@@ -201,3 +201,8 @@ function get_cellstate_color(state::Union{CELLSTATE, CPSTATE})
     end
 
 end
+
+
+#
+_to3d(s::SymmetricTensor{2,2,T}) where T = SymmetricTensor{2,3,T,6}((s[1,1], T(0.0), s[1,2], T(0.0), T(0.0), s[2,2]))
+_to3d(s::SymmetricTensor{2,3}) = s

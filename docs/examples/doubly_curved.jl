@@ -55,7 +55,7 @@ postcell = ceil(Int, 0.5*(NELX*NELY))
 partset1 = collect(1:NELX*NELY)
 
 #
-cellstates = [IgAShell.LUMPED for i in 1:getncells(data.grid)]
+cellstates = [IgAShell.LAYERED for i in 1:getncells(data.grid)]
 interface_damage = zeros(ninterfaces, getncells(data.grid))
 
 #IGAshell data
@@ -71,7 +71,7 @@ IgAShell.IGAShellData(;
     nqp_inplane_order         = 4,
     nqp_ooplane_per_layer     = 2,
     adaptable                 = false,
-    small_deformations_theory = true,
+    small_deformations_theory = false,
     nqp_interface_order       = 4
 )  
 
@@ -164,7 +164,7 @@ using Test
 
 #For debug plotting
 if false
-    using Plots; pyplot(); PyPlot.pygui(true)
+    using Plots; plotly()
     using JLD2; using FileIO
 
     
@@ -183,11 +183,19 @@ if false
     σxx_lumped = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 1, 1)
     σyy_lumped = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 2, 2)
     σxy_lumped = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 1, 2)
+    σxz_lumped = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 1, 3)./ σ₀
+    σyz_lumped = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 2, 3)./ σ₀
+    σzz_lumped = getindex.(output.outputdata["Stress at 50%"].data[end][1].stresses, 3, 3)./ σ₀
     zcoords = getindex.(output.outputdata["Stress at 50%"].data[end][1].local_coords, 3)
+    zcoords .-= mean(zcoords)
 
-    plot!(fig[1], σxx_lumped, zcoords, label = "Lumped")
-    plot!(fig[2], σyy_lumped, zcoords, label = "Lumped")
-    plot!(fig[3], σxy_lumped, zcoords, label = "Lumped")
+    plot!(fig[1], σxx_lumped, zcoords, label = "layered")
+    plot!(fig[2], σyy_lumped, zcoords, label = "layered")
+    plot!(fig[3], σxy_lumped, zcoords, label = "layered")
+
+    plot!(fig[6], σxz_lumped, zcoords, label = "layered")
+    plot!(fig[5], σyz_lumped, zcoords, label = "layered")
+    plot!(fig[4], σzz_lumped, zcoords, label = "layered")
     
     #Reference
     #σ_dr_xx = getindex.(data_dr.stresses, 1, 3)./ σ₀
@@ -211,9 +219,9 @@ if false
     #plot!(fig[1], σ_dr_xx./ σ₀, z_dr, label = "Ref")
     #plot!(fig[2], σ_dr_yy, z_dr, label = "Ref")
     #plot!(fig[3], σ_dr_xy, z_dr, label = "Ref")
-    plot!(fig[4], σ_dr_zz, z_dr, label = "Ref")
-    plot!(fig[5], σ_dr_zy, z_dr, label = "Ref")
-    plot!(fig[6], σ_dr_zx, z_dr, label = "Ref")
+    #plot!(fig[4], σ_dr_zz, z_dr, label = "Ref")
+    #plot!(fig[5], σ_dr_zy, z_dr, label = "Ref")
+    #plot!(fig[6], σ_dr_zx, z_dr, label = "Ref")
 
 end
 
