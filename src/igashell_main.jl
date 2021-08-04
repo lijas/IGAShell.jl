@@ -462,6 +462,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
             ke = zeros(T, ndofs_layer, ndofs_layer)
 
             states = @view materialstates[:, ilay]
+            stress_state = igashell.integration_data.qpstresses[ic]
 
             resize_cache2!(igashell.cache.cache2, ndofs_layer)
 
@@ -469,7 +470,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                 @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
                                                     cv, 
                                                     ke, fe, 
-                                                    getmaterial(layerdata(igashell)), states, 
+                                                    getmaterial(layerdata(igashell)), states, stress_state,
                                                     ue_layer, ilay, nlayers(igashell), active_dofs, 
                                                     is_small_deformation_theory(layerdata(igashell)), IGASHELL_STIFFMAT, getwidth(layerdata(igashell)), igashell.cache.cache2)
                 
@@ -480,7 +481,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
                 @timeit "integrate shell" _get_layer_forcevector_and_stiffnessmatrix!(
                                         cv, 
                                         ke, fe, 
-                                        getmaterial(layerdata(igashell)), ⁿstates, 
+                                        getmaterial(layerdata(igashell)), ⁿstates, stress_state,
                                         ue_layer, ilay, nlayers(igashell), active_dofs, 
                                         is_small_deformation_theory(layerdata(igashell)), IGASHELL_FSTAR, getwidth(layerdata(igashell)), igashell.cache.cache2)
 
@@ -543,7 +544,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
             
             states = @view interfacestates[:, iint]
 
-            active_dofs = active_interface_dofs[iint] #1:Ferrite.ndofs_per_cell(dh,ic)#
+            active_dofs = 1:Ferrite.ndofs_per_cell(dh,ic)#active_interface_dofs[iint] #
             ndofs_interface = length(active_dofs)
 
             resize!(ue_interface, ndofs_interface)
@@ -616,6 +617,11 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
     for (ic,cellid) in enumerate(igashell.cellset)#enumerate(CellIterator(dh, igashell.cellset))
         
         cellstate = getcellstate(adapdata(igashell), ic)
+
+        if is_mixed(cellstate) || is_fully_discontiniuos(cellstate)
+            continue
+        end
+
         #Get cellvalues for cell
         Ce = get_extraction_operator(intdata(igashell), ic)
 
@@ -668,8 +674,7 @@ end
 function _post_lumped(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::Int)
 
     #Extract stresses from states
-    σ_states = states.partstates[ic].materialstates[:]
-    σ_states = getproperty.(σ_states, :σ)
+    σ_states = igashell.integration_data.qpstresses[ic]
 
     celldata = (Xᵇ=Xᵇ, X=X, ue=ue, 
                 nlayers=nlayers(igashell), ninterfaces=ninterfaces(igashell), 
@@ -694,7 +699,7 @@ end
 function _get_layer_forcevector_and_stiffnessmatrix!(
                                 cv::IGAShellValues{dim_s,dim_p,T}, 
                                 ke::AbstractMatrix, fe::AbstractVector,
-                                material, materialstate, 
+                                material, materialstate, stress_state, 
                                 ue_layer::AbstractVector{T}, ilay::Int, nlayers::Int, active_dofs::Vector{Int}, 
                                 is_small_deformation_theory::Bool, calculate_what::IGASHELL_ASSEMBLETYPE, width::T, cache::IGAShellCacheSolid{dim_s,T}) where {dim_s,dim_p,T}
                                 
@@ -743,13 +748,13 @@ function _get_layer_forcevector_and_stiffnessmatrix!(
                     _calculate_linear_forces!(fe, ke, cv, 
                                                 ilay, qpᴸ, qp, width,
                                                 F, R, δF, δɛ,
-                                                material, materialstate, 
+                                                material, materialstate, stress_state,
                                                 ndofs_layer)
                 else
                     _calculate_nonlinear_forces!(fe, ke, cv, 
                                                 ilay, qpᴸ, qp, width,
                                                 F, R, δF, δɛ,
-                                                material, materialstate, 
+                                                material, materialstate, stress_state,
                                                 ndofs_layer)
                 end
             elseif calculate_what === IGASHELL_FSTAR
@@ -766,7 +771,7 @@ function _get_layer_forcevector_and_stiffnessmatrix!(
 
 end
 
-function _calculate_linear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F::Tensor{2,dim_s}, R, δF, δɛ, material, materialstates, ndofs_layer) where {dim_s}
+function _calculate_linear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F::Tensor{2,dim_s}, R, δF, δɛ, material, materialstates, stress_state, ndofs_layer) where {dim_s}
     ɛ = symmetric(F) - one(SymmetricTensor{2,dim_s})
     
     δɛ .= symmetric.(δF)
@@ -779,8 +784,7 @@ function _calculate_linear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F::Ten
     ∂σ∂ɛ = otimesu(R,R) ⊡ ∂̂σ∂ɛ ⊡ otimesu(R',R')
     σ = R⋅_̂σ⋅R'
 
-    #σ, ∂σ∂ɛ, new_matstate = constitutive_driver(material[ilay], ɛ, ⁿmaterialstates[layer_qp])
-    #materialstates[layer_qp] = new_matstate
+    stress_state[qp] = _to3d(_̂σ)
 
     for i in 1:ndofs_layer
 
@@ -801,7 +805,7 @@ function _calculate_linear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F::Ten
 
 end
 
-function _calculate_nonlinear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F, R, δF, δE, material, materialstates, ndofs_layer)
+function _calculate_nonlinear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F, R, δF, δE, material, materialstates, stress_state, ndofs_layer)
     dΩ = getdetJdV(cv,qp)*width
 
     E = symmetric(1/2 * (F' ⋅ F - one(F)))
@@ -812,6 +816,10 @@ function _calculate_nonlinear_forces!(fe, ke, cv, ilay, layer_qp, qp, width, F, 
 
     ∂S∂E = otimesu(R,R) ⊡ _∂S∂E ⊡ otimesu(R',R')
     S = R⋅_S⋅R'
+
+    σ = inv(det(F)) * symmetric(F ⋅ S ⋅ F')
+    _̂σ = symmetric(R'⋅σ⋅R)
+    stress_state[qp] = _to3d(_̂σ)
 
     #σ = inv(det(F)) * F ⋅ S ⋅ F'
 
