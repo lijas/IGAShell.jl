@@ -55,7 +55,7 @@ postcell = ceil(Int, 0.5*(NELX*NELY))
 partset1 = collect(1:NELX*NELY)
 
 #
-cellstates = [IgAShell.LAYERED for i in 1:getncells(data.grid)]
+cellstates = [IgAShell.LUMPED for i in 1:getncells(data.grid)]
 interface_damage = zeros(ninterfaces, getncells(data.grid))
 
 #IGAshell data
@@ -71,7 +71,7 @@ IgAShell.IGAShellData(;
     nqp_inplane_order         = 4,
     nqp_ooplane_per_layer     = 2,
     adaptable                 = false,
-    small_deformations_theory = false,
+    small_deformations_theory = true,
     nqp_interface_order       = 4
 )  
 
