@@ -26,10 +26,14 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
                 continue
             end
 
-            HARDCODED_DIR = 2
+            HARDCODED_DIR = 2 #TODO: this is bad
             interface_damage_variables = interface_damage.(cell_material_states.interfacestates[:, iint], HARDCODED_DIR)
 
             upgrade_list = determine_crack_growth(dh, igashell, interface_damage_variables, cellid, iint)
+
+            if length(upgrade_list) > 0
+                println("Propagation was determined for $cellid, interface $iint, $(mean(interface_damage_variables))")
+            end
 
             for nodeid in upgrade_list
 
@@ -37,7 +41,6 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
 
                 igashell.adaptivity.propagation_checked[iint, ic] = true
 
-                println("Propagation was determined for $cellid, interface $iint, $(mean(interface_damage_variables))")
                 node_states[nodeid] = insert_interface(node_states[nodeid], iint, ninterfaces(igashell))
             end
         end
@@ -52,12 +55,12 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
 
         cellstate = getcellstate(adapdata(igashell), ic)
         recovory_stress_data = @view srdata(igashell).recovered_stresses[:,ic]
-        constitutive_stress_data = state.partstates[ic].materialstates
+        constitutive_stress_data = @view igashell.integration_data.interfacestresses[:,ic]#state.partstates[ic].materialstates
 
-        _should_upgrade, upgrade_to = determine_upgrade(igashell, recovory_stress_data, constitutive_stress_data, cellstate)
+        _should_upgrade, upgrade_to, interface_to_upgrade = determine_upgrade(igashell, recovory_stress_data, constitutive_stress_data, cellstate)
 
         if _should_upgrade
-            println("Initiation was determined for $cellid, $cellstate -> $upgrade_to")
+            println("Initiation was determined for cell $cellid, interfaces: $(interface_to_upgrade)")
 
             # Loop through all nodes for this cell and set the state 
             # of the node to the state of the cell, if it is an "upgrade"
@@ -156,13 +159,14 @@ end
 
 function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T}, 
                            recovory_stress_data::AbstractVector{<:RecoveredStresses}, 
-                           constitutive_stress_data::AbstractMatrix{<:Five.AbstractMaterialState}, 
+                           constitutive_stress_data::AbstractVector{SymmetricTensor{2,3,Float64,6}}, 
                            cellstate::CELLSTATE) where {dim_p, dim_s, T}
 
-    is_fully_discontiniuos(cellstate) && return false, nothing
+    is_fully_discontiniuos(cellstate) && return false, nothing, Int[]
     imat = interface_material(igashell)
     cell_upgraded = false
     new_cellstate = cellstate
+    interface_to_upgrade = Int[]
 
     τᴹ = Five.max_traction_force(imat, 1)
     σᴹ = Five.max_traction_force(imat, dim_s)
@@ -184,7 +188,7 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
         if is_lumped(cellstate)
             σᶻˣ, σᶻʸ, σᶻᶻ = _get_interface_stress_lumped(recovory_stress_data, iint, nqp_oop_per_layer)
         else
-            σᶻˣ, σᶻʸ, σᶻᶻ = _get_interface_stress_layered(constitutive_stress_data, iint, nqp_oop_per_layer, nqp_inp, dim_p)
+            σᶻˣ, σᶻʸ, σᶻᶻ = _get_interface_stress_layered(constitutive_stress_data, iint)
         end
         
 
@@ -192,21 +196,19 @@ function determine_upgrade(igashell::IGAShell{dim_p, dim_s, T},
         F = (σᶻˣ/ τᴹ)^2 + (σᶻʸ / τᴹ)^2 + (macl(σᶻᶻ) / σᴹ)^2
 
         if F > LIMIT_STRESS_CRITERION(layerdata(igashell))
+            #@show σᶻˣ, σᶻʸ, σᶻᶻ
             new_cellstate = insert_interface(new_cellstate, iint, ninterfaces(igashell))
+            append!(interface_to_upgrade, iint)
             cell_upgraded = true
         end
     end
 
-    return cell_upgraded, new_cellstate
+    return cell_upgraded, new_cellstate, interface_to_upgrade
 end
 
-function _get_interface_stress_layered(materialstates::AbstractMatrix{<:Five.AbstractMaterialState}, iint, nqp_oop_per_layer, nqpinplane, dim_p)
+function _get_interface_stress_layered(materialstates::AbstractVector{SymmetricTensor{2,3,Float64,6}}, iint)
 
-    #Avrage stress beween layers
-    idx1 = stress_interface_index(nqp_oop_per_layer, nqpinplane, dim_p)
-    idx2 = stress_interface_index(1, nqpinplane, dim_p)
-    σ = (materialstates[idx2, iint+1].σ + materialstates[idx1, iint].σ)/2
-
+    σ = materialstates[iint]
     #Use dim_p to make to code work in both 2d and 3d
     return σ[1,3], σ[2,3], σ[3,3]
 end

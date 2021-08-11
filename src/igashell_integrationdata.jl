@@ -117,7 +117,7 @@ struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
     cell_values_interface::ISV
     cell_values_vertices::ISV
 
-    active_cell_values::Base.RefValue{ISV}
+    cell_value_mid_interfaces::ISV #For getting stress at interface
 
     iqr::QuadratureRule{dim_p,RefCube,T}
     oqr::QuadratureRule{1,RefCube,T}
@@ -128,6 +128,8 @@ struct IGAShellIntegrationData{dim_p,dim_s,T,ISV<:IGAShellValues,M}
     qr_vertices::Array{QuadratureRule{dim_p,RefCube,T}, 1}
 
     cache_values::CachedOOPBasisValues{dim_p,T,M}
+    interfacestresses::Array{SymmetricTensor{2,3,Float64,6},2} #rows: cells,  cols: stress on interface/qp
+    qpstresses::Vector{Vector{SymmetricTensor{2,3,Float64,6}}} #Vector of cells of qps stresses
 
     extraction_operators::Vector{IGA.BezierExtractionOperator{T}}
     oop_order::Int
@@ -260,6 +262,15 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
     cell_values_sr = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr, mid_ip, getnbasefunctions(cache.basis_values_discont), oop_ip)
     set_oop_basefunctions!(cell_values_sr, initial_basis_values)
 
+    #
+    oop_ip = [ip_layered for i in 1:getnbasefunctions(mid_ip)]
+    cell_values_mid_interface = IGAShellValues(data.thickness, QuadratureRule{dim_p,RefCube}(1), oqr_cohesive[1], mid_ip, getnbasefunctions(ip_layered), oop_ip)
+    set_oop_basefunctions!(cell_values_mid_interface, cache.basis_cohesive_layered[1])
+
+    #Store stresses (cauchy) in gauss points and at interfaces
+    interfacestresses = zeros(SymmetricTensor{2,3,T,6}, ninterfaces(data), getncells(data)) 
+    qpstresses        = [zeros(SymmetricTensor{2,3,T,6}, getnquadpoints(cell_values)) for _ in 1:getncells(data)]
+
     ###
     # Cohesive data
     cell_values_cohesive_top = IGAShellValues(data.thickness, iqr_inp_cohesive, oqr_cohesive[2], mid_ip, getnbasefunctions(ip_discont))
@@ -272,10 +283,9 @@ function IGAShellIntegrationData(data::IGAShellData{dim_p,dim_s,T}, C::Vector{IG
         cell_values_sr,
         cell_values_cohesive_top, cell_values_cohesive_bot,
         face_values, side_values, interface_values, vertices_values,
-        #cell_values_face_top, cell_values_face_bot,
-        Ref(cell_values), #Ref(face_values),
+        cell_values_mid_interface,
         iqr, oqr, iqr_inp_cohesive, oqr_face, oqr_cohesive, iqr_sides, iqr_vertices,
-        cache,
+        cache, interfacestresses, qpstresses,
         C, order)
 end
 
