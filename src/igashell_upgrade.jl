@@ -26,7 +26,7 @@ function _commit_part!(dh::Ferrite.AbstractDofHandler,
                 continue
             end
 
-            HARDCODED_DIR = 1
+            HARDCODED_DIR = 2 #TODO: this is bad
             interface_damage_variables = interface_damage.(cell_material_states.interfacestates[:, iint], HARDCODED_DIR)
 
             upgrade_list = determine_crack_growth(dh, igashell, interface_damage_variables, cellid, iint)
