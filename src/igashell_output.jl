@@ -249,12 +249,9 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
                 end
             end
         end
-        @show faceidx
     end
 
     unique!(alldofs)
-
-    @show alldofs
 
     return (forces        = sum(state.system_arrays.fⁱ[alldofs]),
             displacements = maxu) # maximum(abs.(state.d[alldofs]))
