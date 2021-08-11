@@ -605,10 +605,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
 
 end
 
-function Five.assemble_massmatrix!( dh::Ferrite.AbstractDofHandler, igashell::IGAShell{dim_p,dim_s,T}, system_arrays::StateVariables) where {dim_p,dim_s,T}
-
-end
-
 function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {dim_s, dim_p, T}
     #if dim_s == 2
     #    return
