@@ -206,3 +206,38 @@ end
 #
 _to3d(s::SymmetricTensor{2,2,T}) where T = SymmetricTensor{2,3,T,6}((s[1,1], T(0.0), s[1,2], T(0.0), T(0.0), s[2,2]))
 _to3d(s::SymmetricTensor{2,3}) = s
+
+"""
+Dispatch on Nurbscoords 
+"""
+
+function Ferrite.cellcoords!((x, w)::NurbsCoords, dh::Ferrite.AbstractDofHandler, i::Int)
+    Ferrite.cellcoords!(x, dh, i)
+    getweights!(w, dh.grid, i)
+end
+
+function IGA.compute_bezier_points!((xb, wb)::NurbsCoords{dim_s,T2}, Ce::BezierExtractionOperator{T}, (x,w)::NurbsCoords{dim_s, T2}; dim::Int=1) where {dim_s,T,T2}
+    IGA.compute_bezier_points!(xb, Ce, w.*x, dim=dim)
+    IGA.compute_bezier_points!(wb, Ce, w)
+    xb .*= inv.(wb)
+end
+
+function IGA.set_bezier_operator!(cv::IGAShellValues, Ce::BezierExtractionOperator{T}, (x,w)::NurbsCoords{dim_s,T}) where {dim_s,T}
+    IGA.set_bezier_operator!(cv, w.*Ce)
+end
+
+function IGA.set_bezier_operator!(cv::IGAShellValues, Ce::BezierExtractionOperator{T}, x::Vector{Vec{dim_s,T}}) where {dim_s,T}
+    IGA.set_bezier_operator!(cv, Ce)
+end
+
+function Base.similar((x,w)::NurbsCoords{dim_s, T}) where {dim_s,T}
+    return similar(x), similar(w)
+end
+
+function Base.zeros(::Type{NurbsCoords{dim_s,T}}, n::Int...) where {dim_s,T}
+    return (zeros(Vec{dim_s,T},n), zeros(T,n))
+end
+
+function myzeros(::Type{NurbsCoords{dim_s,T}}, n::Int) where {dim_s,T}
+    return (zeros(Vec{dim_s,T},n), zeros(T,n))
+end

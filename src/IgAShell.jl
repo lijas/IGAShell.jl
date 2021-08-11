@@ -14,8 +14,8 @@ using TimerOutputs
 
 Used for dispatching on Nurbs (coords and weights) or Bsplines (only coords), depending on what is used.
 """
-const NurbsCoords{dim_s,T} = Tuple{AbstractVector{Vec{dim_s,T}}, AbstractVector{T}}
-const NurbsOrBSplineCoords{dim_s,T} = Union{ Vector{Vec{dim_s,T} , NurbsCoords{dim_s,T}}}
+const NurbsCoords{dim_s,T} = Tuple{Vector{Vec{dim_s,T}}, Vector{T}}
+const NurbsOrBSplineCoords{dim_s,T} = Union{ Vector{Vec{dim_s,T}} , NurbsCoords{dim_s,T}}
 
 
 """

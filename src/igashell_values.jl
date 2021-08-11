@@ -346,7 +346,7 @@ function _reinit_layer!(cv::IGAShellValues{dim_s,dim_p,T}, qp_indx) where {dim_s
     G[dim_s] = D
 
     detJ = dim_s == 3 ? norm((cross(G[1], G[2]))) : norm(cross(G[1]))
-    cv.detJdA[qp] = detJ*cv.qr.weights[qp]
+    cv.detJdA[qp] = detJ*cv.qr.weights[qp] # TODO: Should be detJ*cv.iqr.weights[iqp] ? 
     cv.detJdV[qp] = detJ*cv.iqr.weights[iqp]*cv.oqr.weights[oqp]*0.5*cv.thickness
     
     Gⁱʲ = inv(SymmetricTensor{2,dim_s,T}((i,j)-> G[i]⋅G[j]))
@@ -608,10 +608,10 @@ function basis_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, i::Int) where {
     return cv.N[i,qp]
 end
 
-function shape_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (xᴮ, wᴮ)::NurbsCoords{dim_s,T}) where {dim_s,dim_p,T}
+function Ferrite.shape_value(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (xᴮ, wᴮ)::NurbsCoords{dim_s,T}) where {dim_s,dim_p,T}
     val = zero(Vec{dim_s,T})
     nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
-    @assert(length(ue) == nbasefuncs)
+    @assert(length(xᴮ) == nbasefuncs)
 
     W = 0.0
     @inbounds for i in 1:nbasefuncs
@@ -628,13 +628,13 @@ function shape_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (x�
 
     grad = zero(Vec{dim_s,T})
     nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
-    @assert(length(ue) == nbasefuncs)
+    @assert(length(xᴮ) == nbasefuncs)
 
     W = 0.0
     dWdξ = 0.0
     @inbounds for i in 1:nbasefuncs
         N = cv.inplane_values_bezier.N[i,qp]
-        dNdξ = cv.inplane_values_bezier.dNdξ[i,qp][θ]
+        dNdξ = cv.inplane_values_bezier.dNdξ[i,qp][Θ]
 
         W += N * wᴮ[i]
         dWdξ +=  dNdξ * wᴮ[i]
@@ -642,7 +642,7 @@ function shape_parent_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (x�
 
     @inbounds for i in 1:nbasefuncs
         N = cv.inplane_values_bezier.N[i,qp]
-        dNdξ = cv.inplane_values_bezier.dNdξ[i,qp][θ]
+        dNdξ = cv.inplane_values_bezier.dNdξ[i,qp][Θ]
         
         grad += xᴮ[i] * wᴮ[i] * inv(W^2) * (dNdξ * W - dWdξ * N)
     end
@@ -652,16 +652,17 @@ end
 function shape_parent_second_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, (xᴮ, wᴮ)::NurbsCoords{dim_s,T}, θ::Tuple{Int,Int}) where {dim_s,dim_p,T}
     hess = zero(Vec{dim_s,T})
     nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
-    @assert(length(ue) == nbasefuncs)
+    @assert(length(xᴮ) == nbasefuncs)
 
     W = 0.0
-    dWdξ = 0.0
+    dWdξ₁ = 0.0
+    dWdξ₂ = 0.0
     d²Wdξ² = 0.0
     @inbounds for i in 1:nbasefuncs
         N = cv.inplane_values_bezier.N[i,qp]
         dNdξ₁ = cv.inplane_values_bezier.dNdξ[i,qp][θ[1]]
         dNdξ₂ = cv.inplane_values_bezier.dNdξ[i,qp][θ[2]]
-        d²Ndξ² = cv.inplane_values_bezier.d²Ndξ²[i,qp][θ[1],[θ[2]]]
+        d²Ndξ² = cv.inplane_values_bezier.d²Ndξ²[i,qp][θ[1],θ[2]]
 
         W    += N * wᴮ[i]
         dWdξ₁ +=  dNdξ₁ * wᴮ[i]
@@ -673,35 +674,51 @@ function shape_parent_second_derivative(cv::IGAShellValues{dim_s,dim_p,T}, qp::I
         N = cv.inplane_values_bezier.N[i,qp]
         dNdξ₁ = cv.inplane_values_bezier.dNdξ[i,qp][θ[1]]
         dNdξ₂ = cv.inplane_values_bezier.dNdξ[i,qp][θ[2]]
-        d²Ndξ² = cv.inplane_values_bezier.d²Ndξ²[i,qp][θ[1],[θ[2]]]
+        d²Ndξ² = cv.inplane_values_bezier.d²Ndξ²[i,qp][θ[1],θ[2]]
         
-        hess += xᴮ[i] * wᴮ[i] *
+        hess += xᴮ[i] * wᴮ[i] * (
              -2*inv(W^3) * dWdξ₂ * (W*dNdξ₁ - dWdξ₁*N) + 
              inv(W^2)*((dWdξ₂*dNdξ₁ + W*d²Ndξ²) - (d²Wdξ²*N + dWdξ₁*dNdξ₂))
+            )
     end
     return hess
+end
+
+function Ferrite.spatial_coordinate(cv::IGAShellValues{dim_s,dim_p,T}, qp::Int, x::NurbsCoords{dim_s,T}) where {dim_s,dim_p,T}
+    i2s = CartesianIndices((getnquadpoints_inplane(cv), getnquadpoints_ooplane(cv)))
+    iqp, oqp = Tuple(i2s[qp])
+    D = cv.Eₐ[iqp][dim_s]
+
+    Xᴹ = shape_value(cv, iqp, x)
+    return Xᴹ + cv.oqr.points[oqp][1]*D
+end
+
+function spatial_midsurface_coordinate(cv::IGAShellValues{dim_s,dim_p,T}, iqp::Int, x::NurbsCoords{dim_s,T}) where {dim_s,dim_p,T}
+    @assert(iqp <= getnquadpoints_inplane(cv))
+    Xᴹ = shape_value(cv, iqp, x)
+    return Xᴹ
 end
 
 function _inplane_nurbs_preprocess(cv::IGAShellValues{dim_s,dim_p,T}, wᴮ::Vector{T}) where {dim_s,dim_p,T}
 
     nbasefuncs = getnbasefunctions(cv.inplane_values_bezier)
-    @assert(length(ue) == nbasefuncs)
+    @assert(length(wᴮ) == nbasefuncs)
 
     @inbounds for i in 1:getnquadpoints_inplane(cv)
 
         W = zero(T)
-        dWdξ = zero(Vec{dim,T})
-        @inbounds for j in 1:n_geom_basefuncs
+        dWdξ = zero(Vec{dim_p,T})
+        @inbounds for j in 1:nbasefuncs
             dNdξ = cv.inplane_values_bezier.dNdξ[j,i]
             N = cv.inplane_values_bezier.N[j, i]
 
-            W    += wᴮ[j] * N[j, i]
-            dWdξ += wᴮ[j] * dNdξ[j, i]
+            W    += wᴮ[j] * N
+            dWdξ += wᴮ[j] * dNdξ
         end
 
         @inbounds for j in 1:nbasefuncs
             dNdξ = cv.inplane_values_bezier.dNdξ[j,i]
-            N = cv_bezier.N[j, i]
+            N = cv.inplane_values_bezier.N[j, i]
 
             cv.inplane_values_nurbs.dNdξ[j, i] = inv(W)*dNdξ - inv(W^2) * N * dWdξ
             cv.inplane_values_nurbs.N[j, i] = N/W
