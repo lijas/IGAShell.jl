@@ -629,7 +629,7 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         X = zeros(igashell.layerdata.coordstype, nnodes)
         Xᵇ = similar(X)
         Ferrite.cellcoords!(X, dh, cellid)
-        IGA.compute_bezier_points(Xᵇ, Ce, X)
+        IGA.compute_bezier_points!(Xᵇ, Ce, X)
 
         if is_lumped(cellstate)
             _post_lumped(igashell, Xᵇ, X, ue, Ce, cellstate, ic, cellid)
