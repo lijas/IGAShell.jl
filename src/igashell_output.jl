@@ -307,6 +307,5 @@ Five.outputname(o::IGAShellConfigStateOutput) = "ElementState"
     dir::Int = 1
 end
 
-
 Five.outputname(o::IGAShellMaterialStateOutput) = string(o.field)
 

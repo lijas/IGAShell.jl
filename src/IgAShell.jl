@@ -10,6 +10,15 @@ using StaticArrays
 using TimerOutputs
 
 """
+    NurbsCoords and NurbsOrBSplineCoords
+
+Used for dispatching on Nurbs (coords and weights) or Bsplines (only coords), depending on what is used.
+"""
+const NurbsCoords{dim_s,T} = Tuple{Vector{Vec{dim_s,T}}, Vector{T}}
+const NurbsOrBSplineCoords{dim_s,T} = Union{ Vector{Vec{dim_s,T}} , NurbsCoords{dim_s,T}}
+
+
+"""
 EdgeInterfaceIndex
     Specifiying interface on cell.
     Used when for example applying boundary conditions

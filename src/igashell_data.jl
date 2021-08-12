@@ -330,7 +330,7 @@ end
 """
 
 """
-struct IGAShellData{dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial}
+struct IGAShellData{dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCohesiveMaterial,CT}
     layer_materials::Vector{LM}
     interface_material::IM
     orders::NTuple{dim_s,Int}
@@ -351,6 +351,7 @@ struct IGAShellData{dim_p,dim_s,T,LM<:Five.AbstractMaterial,IM<:Five.AbstractCoh
     nqp_ooplane_per_layer::Int
     nqp_interface_order::Int                  
     add_czcells_vtk::Bool
+    coordstype::Type{CT}
 end
 
 function IGAShellData(;
@@ -362,6 +363,7 @@ function IGAShellData(;
     initial_cellstates::Vector{CELLSTATE},
     nqp_inplane_order::Int,
     nqp_ooplane_per_layer::Int,
+    nurbscoords::Bool                       = false,
     width::T                                = 1.0, #Only used in 2d,
     nlayers::Int                            = length(layer_materials),
     zcoords::Vector{T}                      = collect(-thickness/2:(thickness/nlayers):thickness/2),
@@ -384,6 +386,8 @@ function IGAShellData(;
         end
     end
 
+    coordstype = nurbscoords ? NurbsCoords{dim_s,T} : Vec{dim_s, T}
+
     #-----
     ninterfaces = nlayers-1
     ncells = length(initial_cellstates)
@@ -391,7 +395,7 @@ function IGAShellData(;
     @assert(size(initial_interface_damages)[2] == ncells)
     dim_s == 3 && @assert(width == 1.0)
 
-    return IGAShellData(layer_materials, interface_material, orders, knot_vectors, thickness, width, nlayers, zcoords, initial_cellstates, initial_interface_damages, adaptable, limit_stress_criterion, limit_damage_criterion, search_radius, collect(locked_elements), small_deformations_theory, nqp_inplane_order, nqp_ooplane_per_layer, nqp_interface_order, add_czcells_vtk)
+    return IGAShellData(layer_materials, interface_material, orders, knot_vectors, thickness, width, nlayers, zcoords, initial_cellstates, initial_interface_damages, adaptable, limit_stress_criterion, limit_damage_criterion, search_radius, collect(locked_elements), small_deformations_theory, nqp_inplane_order, nqp_ooplane_per_layer, nqp_interface_order, add_czcells_vtk, coordstype)
 
 end
 

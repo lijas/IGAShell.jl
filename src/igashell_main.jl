@@ -413,8 +413,10 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
 
     assembler = start_assemble(state.system_arrays.Kⁱ, state.system_arrays.fⁱ, fillzero=false)  
 
-    X = igashell.cache.X
-    Xᵇ = igashell.cache.Xᵇ
+    
+    nnodes = Ferrite.nnodes_per_cell(igashell)
+    X = zeros(igashell.layerdata.coordstype, nnodes) #X = igashell.cache.X
+    Xᵇ = similar(X) # Xᵇ = igashell.cache.Xᵇ
     ue = igashell.cache.ue
     fe = igashell.cache.fe
     ife = igashell.cache.ife
@@ -423,8 +425,6 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
     ue = igashell.cache.ue
     celldofs = igashell.cache.celldofs
 
-    nqp_oop_per_layer = getnquadpoints_ooplane_per_layer(igashell)
-
     Δt = state.Δt
     
     @timeit "Shell loop" for (ic, cellid) in enumerate(igashell.cellset)
@@ -432,19 +432,19 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
         cv = build_cellvalue!(igashell, cellstate)
         active_layer_dofs = build_active_layer_dofs(igashell, cellstate)
         
-        Ce = get_extraction_operator(intdata(igashell), ic)
-        IGA.set_bezier_operator!(cv, Ce)
-
         ndofs = Ferrite.ndofs_per_cell(dh, cellid)
         resize!(celldofs, ndofs)
         resize!(ue, ndofs)
 
         Ferrite.cellcoords!(X, dh, cellid)
         Ferrite.celldofs!(celldofs, dh, cellid)
+        
+        Ce = get_extraction_operator(intdata(igashell), ic)
 
         disassemble!(ue, state.d, celldofs)
 
         IGA.compute_bezier_points!(Xᵇ, Ce, X)
+        IGA.set_bezier_operator!(cv, Ce, X)
         @timeit "reinit1" reinit!(cv, Xᵇ)
 
         materialstates = state.partstates[ic].materialstates
@@ -626,9 +626,10 @@ function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {d
         ue = states.d[_celldofs]
 
         nnodes = Ferrite.nnodes_per_cell(igashell)
-        X = zeros(Vec{dim_s,T}, nnodes)
+        X = zeros(igashell.layerdata.coordstype, nnodes)
+        Xᵇ = similar(X)
         Ferrite.cellcoords!(X, dh, cellid)
-        Xᵇ = IGA.compute_bezier_points(Ce, X)
+        IGA.compute_bezier_points!(Xᵇ, Ce, X)
 
         if is_lumped(cellstate)
             _post_lumped(igashell, Xᵇ, X, ue, Ce, cellstate, ic, cellid)
@@ -646,7 +647,7 @@ function _post_layered(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::In
 
     #Shape values for evaluating stresses at center of cell
     cv_mid_interface = igashell.integration_data.cell_value_mid_interfaces
-    set_bezier_operator!(cv_mid_interface, Ce)
+    set_bezier_operator!(cv_mid_interface, Ce, X)
     
     #oop_values = _build_oop_basisvalue!(igashell, cellstate)
     #set_oop_basefunctions!(cv_mid_interface, oop_values)
@@ -678,18 +679,20 @@ function _post_lumped(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::Int
 
     #Build basis_values for cell
     cv = build_cellvalue!(igashell, cellstate)
-    IGA.set_bezier_operator!(cv, Ce)
+    IGA.set_bezier_operator!(cv, Ce, X)
     reinit!(cv, Xᵇ)
 
     #Build basis_values for stress_recovory
     cv_sr = intdata(igashell).cell_values_sr
     oop_values = _build_oop_basisvalue!(igashell, cellstate)
     set_oop_basefunctions!(cv_sr, oop_values)
-    IGA.set_bezier_operator!(cv_sr, Ce)
+    IGA.set_bezier_operator!(cv_sr, Ce, X)
     reinit!(cv_sr, Xᵇ)
 
     recover_cell_stresses(srdata(igashell), σ_states, celldata, cv_sr, cv)
     
+
+    IGA.compute_bezier_points!(Xᵇ, Ce, X)
 end
 
 function _get_layer_forcevector_and_stiffnessmatrix!(

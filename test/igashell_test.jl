@@ -18,27 +18,29 @@ function calculate_element_area(cv::IgAShell.IGAShellValues, INDEX)
     return A
 end
 
-function get_and_reinit_cv(igashell, grid, cellid)
+function get_and_reinit_cv(igashell, grid, cellid, getcoords::Function = Ferrite.getcoordinates)
     cellstate = IgAShell.getcellstate(igashell, cellid)
     cv = IgAShell.build_cellvalue!(igashell, cellstate)
     Ce = IgAShell.get_extraction_operator(IgAShell.intdata(igashell), cellid)
-    IgAShell.IGA.set_bezier_operator!(cv, Ce)
+    coords = getcoords(grid, cellid)
+    IgAShell.IGA.set_bezier_operator!(cv, Ce, coords)
     
-    coords = getcoordinates(grid, cellid)
-    bezier_coords = IgAShell.IGA.compute_bezier_points(Ce, coords)
+    bezier_coords = similar(coords)
+    IgAShell.IGA.compute_bezier_points!(bezier_coords, Ce, coords)
     
     IgAShell.reinit!(cv, bezier_coords)
     return cv
 end
 
-function get_and_reinit_fv(igashell, grid, index)
+function get_and_reinit_fv(igashell, grid, index, getcoords::Function = Ferrite.getcoordinates)
 
     cv = IgAShell.build_facevalue!(igashell, index)
     Ce = IgAShell.get_extraction_operator(IgAShell.intdata(igashell), index[1])
-    IgAShell.IGA.set_bezier_operator!(cv, Ce)
-
-    coords = getcoordinates(grid, index[1])
-    bezier_coords = IgAShell.IGA.compute_bezier_points(Ce, coords)
+    coords = getcoords(grid, index[1])
+    IgAShell.IGA.set_bezier_operator!(cv, Ce, coords)
+    
+    bezier_coords = similar(coords)
+    IgAShell.IGA.compute_bezier_points!(bezier_coords, Ce, coords)
     
     IgAShell.reinit!(cv, bezier_coords)
     return cv
@@ -143,6 +145,68 @@ function get_cube_mesh(cellstate; h, b, L)
         nqp_interface_order       = 4,
     ) 
     igashell = IgAShell.IGAShell(collect(1:getncells(grid)), reverse(nurbsmesh.IEN, dims=1), igashelldata) 
+
+    return grid, igashell
+end
+
+
+function get_doubly_curved_mesh(cellstate; h)
+
+    dim = 3; T = Float64
+    ν = 0.4; E = 1e5
+    visc_para = 0.0
+    
+    #Mesh
+    orders = (2,2); r = 2; R1 = 25.0; R2 = 10.0
+    angles = deg2rad.(T[0,90,0])
+    nlayers = length(angles)
+    ninterfaces = nlayers-1
+    
+    nelx = 1; nely = 1
+    #nurbsmesh = IgAShell.IgAShell.IGA.generate_curved_nurbsmesh((nelx,nely), orders, pi/2, R, b, multiplicity=(1,1))
+    nurbsmesh = IgAShell.IGA.generate_nurbs_patch(:doubly_curved_nurbs, (nelx,nely); r1=R1, r2=R2, α2 = deg2rad(95)) 
+    grid = BezierGrid(nurbsmesh)
+
+    cellstates = [cellstate for i in 1:nelx*nely]
+
+    interface_damage = [0.0 for _ in 1:ninterfaces, _ in 1:nelx*nely]
+    
+    #Material
+    interfacematerial = Five.MatCZKolluri(
+        σₘₐₓ = 60 * 0.5,
+        τₘₐₓ = 90 * 0.5,
+        Φₙ = 211.0/1000,
+        Φₜ = 1050.0/1000
+    )
+    layermats = [MatLinearElastic(E=E, nu=ν) for i in 1:nlayers]
+    
+    #IGAshell
+    #igashelldata = IgAShell.IGAShellData{dim}(layer_mats, interfacematerial, visc_para, (orders...,r), nurbsmesh.knot_vectors, h, dim==2 ? b : 1.0, nlayers, cellstates, interface_damage, adaptive, linear, 4, 3, 4)
+    igashelldata = 
+    IgAShell.IGAShellData(;
+        layer_materials           = layermats,
+        interface_material        = interfacematerial,
+        orders                    = (orders..., r),
+        knot_vectors              = nurbsmesh.knot_vectors,
+        thickness                 = h,
+        initial_cellstates        = cellstates,
+        #initial_interface_damages          = interface_damage,
+        width                     = dim == 2 ? b : 1.0,
+        adaptable                 = false,
+            limit_stress_criterion   = 100.993,
+            limit_damage_criterion   = 0.01,
+            search_radius            = 10.0,
+            locked_elements          = Int[],
+        small_deformations_theory = true,
+        nqp_inplane_order         = 4,
+        nqp_ooplane_per_layer     = 4,
+        nqp_interface_order       = 2,
+        nurbscoords               = true
+    ) 
+
+    igashell = IgAShell.IGAShell(
+        cellset = collect(1:getncells(grid)), 
+        data = igashelldata) 
 
     return grid, igashell
 end
@@ -319,6 +383,54 @@ end
     κ = getindex.(cv.κᵐ,1,1)
     @test all( isapprox.(κ, 1/R, atol=1e-2) )
     
+end
+
+
+@testset "igashellvalues_doubly_curved_nurbs" begin
+
+    # # #
+    # TEST IGASHELL VALUES
+    # # #
+
+    R1 = 25.0; R2 = 10.0; α2 = deg2rad(95)
+    grid, igashell = get_doubly_curved_mesh(IgAShell.LAYERED, h=1.0)
+    minx = minimum(getindex.(getproperty.(grid.nodes, :x), 1))
+    addedgeset!(grid, "left", (x)-> x[1] ≈ minx)
+    addedgeset!(grid, "clamped", (x)-> x[3] ≈ 0.0)
+    addedgeset!(grid, "force", (x)-> x[2] ≈ 0.0)
+    
+    clampedface = collect(getedgeset(grid, "clamped"))
+    clampedtedge = [IgAShell.EdgeInterfaceIndex(edgeidx..., 1) for edgeidx in clampedface]
+    leftface  = collect(getedgeset(grid, "left"))
+
+    #Volume
+    V = 0.0
+    for cellid in 1:getncells(grid)
+
+        cv = get_and_reinit_cv(igashell, grid, cellid, IGA.get_bezier_coordinates)
+
+        V += calculate_element_volume(cv)
+    end
+    @test V==V #TODO: analytical expression for a doublye curved shell volume/area
+
+    A = 0.0
+    for face in clampedface
+        cv = get_and_reinit_fv(igashell, grid, face)
+
+        A += calculate_element_area(cv, face)
+    end
+    @show isapprox(A , deg2rad(α2)*R2 , atol = 1e-5)
+    
+    #Edgelength 4
+    A = 0.0
+    for edge in leftface
+        cv = get_and_reinit_fv(igashell, grid, edge, IGA.get_bezier_coordinates)
+        A += calculate_element_area(cv, edge)
+    end
+    re = R1 + (R2*cos(α2/2) - R2) #Radius at min/max x-dirctions
+    @test isapprox(A, deg2rad(90) * re, atol=1e-5)
+
+
 end
 
 @testset "igashell utils" begin
