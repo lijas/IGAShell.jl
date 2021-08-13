@@ -145,3 +145,43 @@ function calculate_stress_recovory_variables(ip, X::Vector{Vec{dim_s,T}}, h::T, 
     
     return a, da, λ, κ
 end
+
+
+function eval_stress(ip::Interpolation, x::Vector{NurbsCoords}, ξ, )
+
+    B(ξ) = Ferrite.value(ip,ξ)
+    W(ξ) = sum(B(ξ) .* w)
+    R(ξ) = begin
+        B = Ferrite.value(ip,ξ)
+        W = sum(B.*w)
+        B.*w./W
+    end
+
+    X(ξ) = sum(R(ξ).*x) 
+    E(ξ) = gradient(ξ -> X(ξ), ξ)
+    D(ξ) = begin 
+        E1, E2 = gradient(ξ -> X(ξ), ξ)
+        cross(E1,E2)/norm(cross(E1,E2))
+    end
+
+    Dₐ = gradient(ξ -> D(ξ), ξ)
+
+    G = ((E(ξ) .+ ζ*t/2*Dₐ)..., t/2*D(ξ))
+
+    Gᵢⱼ = SymmetricTensor{2,3,T,6}((i,j)->G[i]⋅G[j])
+    Gⁱʲ = inv(Gᵢⱼ)
+    for i in 1:3
+        Gᴵ[i] = zero(Vec{dim_s,T})
+        for j in 1:3
+            Gᴵ[i] += Gⁱʲ[i,j]*G[j]
+        end
+    end
+    
+    dudξ = gradient(x->_calculate_u(ip, ue, x), ξ)
+    g = sum(i -> G[i] + dudξ[:,i], 1:3)
+    
+    F = sum(g .⊗ Gⁱ)
+    ε = symmetric(F) - one(F)
+    σ = constitutive_driver(material, ε)
+
+end
