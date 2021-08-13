@@ -1,5 +1,5 @@
 export IGAShellStressOutput, IGAShellBCOutput, IGAShellRecovoredStressOutput
-export IGAShellMaterialStateOutput, IGAShellConfigStateOutput, IGAShellMidInterfaceStress
+export IGAShellMaterialStateOutput, IGAShellConfigStateOutput, IGAShellMidInterfaceStress, IGAShellSRIntegrationDataOutput
 """
 IGAShellStressOutput
     Output of stresses at specific elements
@@ -174,6 +174,34 @@ function Five.collect_output!(output::IGAShellRecovoredStressOutput, state::Stat
 
 end
 
+"""
+IGAShellSRIntegrationDataOutput
+    Output
+"""
+struct IGAShellSRIntegrationDataOutput{P<:IGAShell} <: Five.AbstractOutput
+    igashell::Base.RefValue{P}
+end
+
+function IGAShellSRIntegrationDataOutput(; igashell::IGAShell)
+    return IGAShellSRIntegrationDataOutput(Base.RefValue(igashell))
+end
+
+function Five.build_outputdata(output::IGAShellSRIntegrationDataOutput, cellid, ::MixedDofHandler)
+    @assert(typeof(cellid) == Int) # Only accept cellids
+    return output
+end
+
+function Five.collect_output!(output::IGAShellSRIntegrationDataOutput, state::StateVariables{T}, cellid::Int, globaldata) where T
+    
+    #Extract some variables
+    igashell = output.igashell[]
+
+    local_id = findfirst((i)->i==cellid, igashell.cellset)
+    values = igashell.stress_recovory.integration_values[:, :, local_id]
+    
+    return values
+
+end
 
 """
 IGAShellBCOutput
