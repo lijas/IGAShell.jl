@@ -230,6 +230,7 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
         
         w = get_oop_qp_weight(cv_sr, qp_sr)
         ξ = get_qp_coord(cv_sr, qp_sr)
+        ξη = Vec{2,T}( (ξ[1], ξ[2]))
         ζ = ξ[dim_s] 
 
         #Get coords of inplane quadrature points for interpolation of stresses
@@ -243,9 +244,43 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
 
         xᴸ = Xᴸ + uᴸ 
 
-        _a, _da, _λ, _κ = calculate_stress_recovory_variables(ipᴸ, Xᴸ_mid, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
-        a, da, λ, κ = _store_as_tensors(_a, _da, _λ, _κ)
+        local σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, a, da
+        if false
 
+            #Calculate and extract gradients for stress recovory equations
+            _σ = function_value(cvᴸ, 1, σ_states, range)
+            ∇σ = Ferrite.function_derivative(cvᴸ, 1, σ_states, range)
+            ∇∇σ = function_second_derivative(cvᴸ, 1, σ_states, range)
+            σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(_σ, ∇σ, ∇∇σ)
+
+            _a, _da, _λ, _κ = calculate_stress_recovory_variables(ipᴸ, Xᴸ_mid, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
+            a, da, _, _ = _store_as_tensors(_a, _da, _λ, _κ)
+    
+        else
+            E1, E2 = cv_sr.Eₐ[1][1], cv_sr.Eₐ[1][2]
+            dE1dξ₁ = cv_sr.Eₐₐ[1][1,1]
+            dE2dξ₁ = cv_sr.Eₐₐ[1][2,1]
+            dE1dξ₂ = cv_sr.Eₐₐ[1][1,2]
+            dE2dξ₂ = cv_sr.Eₐₐ[1][2,2]
+            
+            _a1 = norm(E1)
+            _a2 = norm(E2)
+            a = Vec((_a1, _a2))
+
+            _da11 = inv(norm(a[1])) * (E1 ⋅ dE1dξ₁)
+            _da21 = inv(norm(a[1])) * (E1 ⋅ dE1dξ₂)
+            _da12 = inv(norm(a[2])) * (E2 ⋅ dE2dξ₁)
+            _da22 = inv(norm(a[2])) * (E2 ⋅ dE2dξ₂)
+            da = Tensor{2,2,Float64,4}((_da11, _da21, _da12, _da22))
+
+            uvec = collect(reinterpret(Vec{3,Float64}, celldata.ue))
+            eval_stress2(ξ) = eval_stress((cv_sr.inp_ip, cv_sr.oop_ip, celldata.Ce), celldata.X, h, cv_sr.R[lqp], celldata.materials[ilay], uvec, ξ, ζ)
+
+            _σ = eval_stress2(ξη)
+            ∇σ = shellgradient(ξ -> eval_stress2(ξ), ξη)
+            ∇∇σ = shellhessian(ξ -> eval_stress2(ξ), ξη)
+            σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(_σ, ∇σ, ∇∇σ)
+        end
 
         # lambda and kappa are both wrong from the lagrange-interpolation
         # until problem is found, calculate from the following:
@@ -253,34 +288,17 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
         #_a = [(sqrt(g[i]⋅g[i])) for i in 1:dim_p]
         #a = Vec{dim_p,T}(Tuple(_a))
         #da = zero(Tensor{2,dim_p,T})
-            _λ = zeros(T,2)
-            _λ[1] = 1+cv_sr.κᵐ[1][1,1]*ζ*h/2
-            _λ[2] = (dim_s == 2) ? 1.0 : 1+cv_sr.κᵐ[1][2,2]*ζ*h/2
-            _κ = zeros(T,2,2)
-            _κ[1,1] = cv_sr.κᵐ[1][1,1]
-            _κ[1,2] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][1,2]
-            _κ[2,1] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,1]
-            _κ[2,2] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,2]
-            λ = Vec{2,T}(Tuple(_λ))
-            κ = Tensor{2,2,T,4}(Tuple(_κ))
-            p, V = eigen(κ, sortby = x -> -abs(x))
-        
-        #Calculate and extract gradients for stress recovory equations
-        #_σ = function_value(cvᴸ, 1, σ_states, range)
-        #∇σ = Ferrite.function_derivative(cvᴸ, 1, σ_states, range)
-        #∇∇σ = function_second_derivative(cvᴸ, 1, σ_states, range)
-        #σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(_σ, ∇σ, ∇∇σ)
-        
-        if true
-
-            #_a1 = norm(cv_sr.Eₐ[1][1,1])
-            #_a2 = norm(cv_sr.Eₐ[1][2,2])
-            #a = Vec((_a1, _a2))
-
-            σ = eval_stress((cv_sr.inp_ip, cv_sr.oop_ip, celldata.C), celldata.X, ξ)
-            #∇σ = gradient(ξ -> eval_stress((mip, oop, C), X, ξ), ξ)
-            #∇∇σ = hessian(ξ -> eval_stress((mip, oop, C), X, ξ), ξ)
-        end
+        _λ = zeros(T,2)
+        _λ[1] = 1+cv_sr.κᵐ[1][1,1]*ζ*h/2
+        _λ[2] = (dim_s == 2) ? 1.0 : 1+cv_sr.κᵐ[1][2,2]*ζ*h/2
+        _κ = zeros(T,2,2)
+        _κ[1,1] = cv_sr.κᵐ[1][1,1]
+        _κ[1,2] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][1,2]
+        _κ[2,1] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,1]
+        _κ[2,2] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,2]
+        λ = Vec{2,T}(Tuple(_λ))
+        κ = Tensor{2,2,T,4}(Tuple(_κ))
+        p, V = eigen(κ, sortby = x -> -abs(x))
 
         integration_values[lqp+1,ilay] = StressRecovoryIntegrationValues(σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, κ, a, da, λ, ζ)
     end
@@ -463,7 +481,7 @@ function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{3,T}}, _λ::Vector{T},
     return a, da, λ, _κ
 end
 
-function _store_as_tensors(_σ::SymmetricTensor, ∇σ::Vector, ∇∇σ::Matrix)
+function _store_as_tensors(_σ::SymmetricTensor, ∇σ::Union{Vector, NTuple{N,SymmetricTensor}}, ∇∇σ::Union{Matrix, NTuple{N2,SymmetricTensor}}) where {N,N2}
     if length(∇σ) == 1 #2d
 
         # Note: Maybe remove _σ22

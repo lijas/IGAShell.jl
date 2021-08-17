@@ -146,43 +146,115 @@ function calculate_stress_recovory_variables(ip, X::Vector{Vec{dim_s,T}}, h::T, 
     return a, da, λ, κ
 end
 
+function shellgradient(f::F, v::V) where {F, V <: Union{SecondOrderTensor, Vec, Number}}
+    v_dual = Tensors._load(v, Tensors.Tag(f, V))
+    res = f(v_dual)
+    return Tensors._extract_gradient(res, v)
+end
 
-function eval_stress(ip::Interpolation, x::Vector{NurbsCoords}, ξ, )
+function shellhessian(f::F, v::V) where {F, V <: Union{SecondOrderTensor, Vec, Number}}
+    gradf = y -> shellgradient(f, y)
+    return gradient(gradf, v)
+end
 
-    B(ξ) = Ferrite.value(ip,ξ)
-    W(ξ) = sum(B(ξ) .* w)
+function Tensors._extract_gradient(v::SymmetricTensor{2, 3, <: Tensors.Dual}, ::Vec{2})
+    p1, p2, p3 = Tensors.partials(v[1,1]), Tensors.partials(v[2,1]), Tensors.partials(v[3,1])
+    p4, p5, p6 = Tensors.partials(v[2,2]), Tensors.partials(v[3,2]), Tensors.partials(v[3,3])
+
+    v1 = SymmetricTensor{2, 3}((p1[1], p2[1], p3[1], p4[1], p5[1], p6[1]))
+    v2 = SymmetricTensor{2, 3}((p1[2], p2[2], p3[2], p4[2], p5[2], p6[2]))
+    return v1,v2
+end
+
+function Tensors._extract_gradient((v1,v2)::NTuple{2, SymmetricTensor{2, 3, <: Tensors.Dual}}, V::Vec{2})
+    v11,v12 = Tensors._extract_gradient(v1, V)
+    v21,v22 = Tensors._extract_gradient(v2, V)
+    return (v11, v12, v21, v22)
+end
+
+function Tensors._extract_gradient(v::Vec{3, <: Tensors.Dual}, ::Vec{2})
+    p1, p2, p3 = Tensors.partials(v[1]), Tensors.partials(v[2]), Tensors.partials(v[3])
+    v1 = Vec{3}((p1[1],p2[1],p3[1]))
+    v2 = Vec{3}((p1[2],p2[2],p3[2]))
+    return v1,v2
+end
+
+function Tensors._extract_gradient((v1,v2)::Tuple{Vec{3, <: Tensors.Dual}, Vec{3, <: Tensors.Dual}}, V::Vec{3})
+    v11,v12 = Tensors._extract_gradient(v1, V)
+    v21,v22 = Tensors._extract_gradient(v2, V)
+    return (v11, v12, v21, v22)
+end
+
+function eval_stress((mip, oip, C), x::Vector{Vec{dim,T2}}, h::Float64, Rmat, material, uvec::Vector{Vec{3,Float64}}, ξ::Vec{2,T}, ζ) where {dim,T,T2}
+    eval_stress((mip, oip, C), (x,ones(Float64,length(x))), h, Rmat, material, uvec, ξ, ζ)
+end
+
+function eval_stress((mip, oip, C), (x,w)::NurbsCoords, h::Float64, Rmat, material, uvec::Vector{Vec{3,Float64}}, ξ::Vec{2,T}, ζ) where T
+
+    @assert(getnbasefunctions(mip) == length(oip))
+
     R(ξ) = begin
-        B = Ferrite.value(ip,ξ)
-        N = Ce * B
+        B = Ferrite.value(mip,ξ)
+        N = C * B
         W = sum(N.*w)
         N.*w./W
     end
 
     X(ξ) = sum(R(ξ).*x) 
-    E(ξ) = gradient(ξ -> X(ξ), ξ)
+    E(ξ) = shellgradient(ξ -> X(ξ), ξ)
     D(ξ) = begin 
-        E1, E2 = gradient(ξ -> X(ξ), ξ)
+        E1, E2 = E(ξ)
         cross(E1,E2)/norm(cross(E1,E2))
     end
 
-    Dₐ = gradient(ξ -> D(ξ), ξ)
+    Dₐ = shellgradient(ξ -> D(ξ), ξ)
+    E1, E2 = E(ξ)
 
-    G = ((E(ξ) .+ ζ*t/2*Dₐ)..., t/2*D(ξ))
+    G = zeros(Vec{3,T}, 3)
+    G[1] = E1 + ζ*h/2*Dₐ[1]
+    G[2] = E2 + ζ*h/2*Dₐ[2]
+    G[3] = h/2*D(ξ)
 
-    Gᵢⱼ = SymmetricTensor{2,3,T,6}((i,j)->G[i]⋅G[j])
+    Gᵢⱼ = SymmetricTensor{2,3}((i,j)->G[i]⋅G[j])
     Gⁱʲ = inv(Gᵢⱼ)
+    Gᴵ = similar(G)
     for i in 1:3
-        Gᴵ[i] = zero(Vec{dim_s,T})
+        Gᴵ[i] = zero(Vec{3,T})
         for j in 1:3
             Gᴵ[i] += Gⁱʲ[i,j]*G[j]
         end
     end
     
-    dudξ = gradient(x->_calculate_u(ip, ue, x), ξ)
-    g = sum(i -> G[i] + dudξ[:,i], 1:3)
-    
-    F = sum(g .⊗ Gⁱ)
-    ε = symmetric(F) - one(F)
-    σ = constitutive_driver(material, ε)
+    _u(ξζ::Vec{3,T}) where T = begin
+        ξ = ξζ[1:2] |> Tuple |> Vec{2}
+        ζ = ξζ[3] |> Tuple |> Vec{1}
+        _R = R(ξ)
+        I = 0
+        u = zero(Vec{3,T})
+        for i in 1:length(_R)
+            B = Ferrite.value(oip[i], ζ)
+            for j in 1:length(B)
+                I += 1
+                u += _R[i] * B[j] * uvec[I]
+            end
+        end
+        return u
+    end
 
+    dudξ = gradient(x->_u(x), Vec{3,T}( (ξ[1],ξ[2],T(ζ)) ))
+
+    g = similar(G)
+    for d in 1:3
+        g[d] = G[d] + dudξ[:,d]
+    end
+
+    F = zero(Tensor{2,3,T})
+    for i in 1:3
+        F += g[i]⊗Gᴵ[i]
+    end
+
+    ε = symmetric(F) - symmetric(one(F))
+    _̂ε = symmetric(Rmat' ⋅ ɛ ⋅ Rmat)
+    _,σ = Five._constitutive_driver(material, _̂ε)
+    return σ
 end

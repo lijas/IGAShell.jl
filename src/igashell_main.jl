@@ -675,7 +675,7 @@ function _post_lumped(igashell, Xᵇ, X, ue, Ce, cellstate, ic::Int, cellid::Int
 
     celldata = (Xᵇ=Xᵇ, X=X, ue=ue, 
                 nlayers=nlayers(igashell), ninterfaces=ninterfaces(igashell), 
-                cellid=cellid, ic=ic)
+                cellid=cellid, Ce = IGA.beo2matrix(Ce), materials = igashell.layerdata.layer_materials, ic=ic)
 
     #Build basis_values for cell
     cv = build_cellvalue!(igashell, cellstate)
