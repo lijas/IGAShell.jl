@@ -246,6 +246,7 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
         _a, _da, _λ, _κ = calculate_stress_recovory_variables(ipᴸ, Xᴸ_mid, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
         a, da, λ, κ = _store_as_tensors(_a, _da, _λ, _κ)
 
+
         # lambda and kappa are both wrong from the lagrange-interpolation
         # until problem is found, calculate from the following:
         #g = calculate_g(cv_sr, qp_sr, celldata.ue)
@@ -265,11 +266,22 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
             p, V = eigen(κ, sortby = x -> -abs(x))
         
         #Calculate and extract gradients for stress recovory equations
-        _σ = function_value(cvᴸ, 1, σ_states, range)
-        ∇σ = Ferrite.function_derivative(cvᴸ, 1, σ_states, range)
-        ∇∇σ = function_second_derivative(cvᴸ, 1, σ_states, range)
-        σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(_σ, ∇σ, ∇∇σ)
+        #_σ = function_value(cvᴸ, 1, σ_states, range)
+        #∇σ = Ferrite.function_derivative(cvᴸ, 1, σ_states, range)
+        #∇∇σ = function_second_derivative(cvᴸ, 1, σ_states, range)
+        #σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ  = _store_as_tensors(_σ, ∇σ, ∇∇σ)
         
+        if true
+
+            #_a1 = norm(cv_sr.Eₐ[1][1,1])
+            #_a2 = norm(cv_sr.Eₐ[1][2,2])
+            #a = Vec((_a1, _a2))
+
+            σ = eval_stress((cv_sr.inp_ip, cv_sr.oop_ip, celldata.C), celldata.X, ξ)
+            #∇σ = gradient(ξ -> eval_stress((mip, oop, C), X, ξ), ξ)
+            #∇∇σ = hessian(ξ -> eval_stress((mip, oop, C), X, ξ), ξ)
+        end
+
         integration_values[lqp+1,ilay] = StressRecovoryIntegrationValues(σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, κ, a, da, λ, ζ)
     end
 

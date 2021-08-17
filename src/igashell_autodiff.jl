@@ -153,8 +153,9 @@ function eval_stress(ip::Interpolation, x::Vector{NurbsCoords}, ξ, )
     W(ξ) = sum(B(ξ) .* w)
     R(ξ) = begin
         B = Ferrite.value(ip,ξ)
-        W = sum(B.*w)
-        B.*w./W
+        N = Ce * B
+        W = sum(N.*w)
+        N.*w./W
     end
 
     X(ξ) = sum(R(ξ).*x) 
