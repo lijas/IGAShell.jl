@@ -158,9 +158,9 @@ using Test
 σᶻʸ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻʸ) ./ σ₀
 σᶻᶻ_vec = getproperty.(output.outputdata["RS at 50%"].data[end][1], :σᶻᶻ) ./ σ₀
 
-@test maximum(abs.(σᶻˣ_vec)) ≈ 0.32610132855073826
-@test maximum(abs.(σᶻʸ_vec)) ≈ 0.1774812741136119
-@test maximum(abs.(σᶻᶻ_vec)) ≈ 1.0996261237077838
+@test maximum(abs.(σᶻˣ_vec)) ≈ 0.3261016746669845 #0.32610132855073826
+@test maximum(abs.(σᶻʸ_vec)) ≈ 0.17748142105749826 #0.1774812741136119
+@test maximum(abs.(σᶻᶻ_vec)) ≈ 1.099626189900567 #1.0996261237077838
 
 #For debug plotting
 if false
