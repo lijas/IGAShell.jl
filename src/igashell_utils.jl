@@ -136,9 +136,13 @@ function active_basefunctions(field_dim::Int, ::Int)
     return 1:field_dim
 end
 
-function extrapolate(y1,y2,x1,x2,x)
+function extrapolate(y1::T,y2::T,x1::T2,x2::T2,x::T2) where {T,T2}
     return y1 + ((x-x1)/(x2-x1))*(y2-y1)
-end#
+end
+
+function midpoint(y1::T, y2::T) where T
+    return 0.5*(y1+y2)
+end
 
 
 

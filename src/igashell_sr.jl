@@ -65,24 +65,74 @@ function extract(a::StressRecovoryIntegrationValues)
 
 end
 
-function midpoints(v1::StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}, v2::StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}) where {dims,dimp,T,Mp,Ms}
-    midvalues = Any[]
-    for field in fieldnames(StressRecovoryIntegrationValues)
-        push!(midvalues, 0.5*(getproperty(v1, field) + getproperty(v2, field)))
-    end
-    return StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}(midvalues...)
+function midpoints(y1::StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}, y2::StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}) where {dims,dimp,T,Mp,Ms}
+
+    @assert(y1.κ == y2.κ)
+    @assert(y1.a == y2.a)
+    @assert(y1.da == y2.da)
+    #=
+    σ   ::SymmetricTensor{2,dims,T,Ms}
+    ∇₁σ ::SymmetricTensor{2,dims,T,Ms}
+    ∇₂σ ::SymmetricTensor{2,dims,T,Ms}
+    ∇₁₁σ::SymmetricTensor{2,dims,T,Ms}
+    ∇₂₁σ::SymmetricTensor{2,dims,T,Ms}
+    ∇₁₂σ::SymmetricTensor{2,dims,T,Ms}
+    ∇₂₂σ::SymmetricTensor{2,dims,T,Ms}
+    κ ::Tensor{2,dimp,T,Mp}
+    a ::Vec{dimp,T}
+    da::Tensor{2,dimp,T,Mp}
+    λ ::Vec{dimp,T}
+    ζ ::T
+    =#
+
+    σ = midpoint(y1.σ, y2.σ)
+    ∇₁σ = midpoint(y1.∇₁σ, y2.∇₁σ)
+    ∇₂σ = midpoint(y1.∇₂σ, y2.∇₂σ)
+    ∇₁₁σ = midpoint(y1.∇₁₁σ, y2.∇₁₁σ)
+    ∇₂₁σ = midpoint(y1.∇₂₁σ, y2.∇₂₁σ)
+    ∇₁₂σ = midpoint(y1.∇₁₂σ, y2.∇₁₂σ)
+    ∇₂₂σ = midpoint(y1.∇₂₂σ, y2.∇₂₂σ)
+    λ = midpoint(y1.λ, y2.λ) 
+    ζ = midpoint(y1.ζ, y2.ζ)
+
+    return StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}(σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, y1.κ, y1.a, y1.da, λ, ζ)
 end
 
 function extrapolate(y1::StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms},y2::StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms},x) where {dims,dimp,T,Mp,Ms}
     
+    @assert(y1.κ == y2.κ)
+    @assert(y1.a == y2.a)
+    @assert(y1.da == y2.da)
+
     x1 = y1.ζ
     x2 = y2.ζ
     
-    midvalues = Any[]
-    for field in fieldnames(StressRecovoryIntegrationValues)
-        push!(midvalues, extrapolate(getproperty(y1, field), getproperty(y2, field), x1, x2, x))
-    end
-    return StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}(midvalues...)
+    #=
+    σ   ::SymmetricTensor{2,dims,T,Ms}
+    ∇₁σ ::SymmetricTensor{2,dims,T,Ms}
+    ∇₂σ ::SymmetricTensor{2,dims,T,Ms}
+    ∇₁₁σ::SymmetricTensor{2,dims,T,Ms}
+    ∇₂₁σ::SymmetricTensor{2,dims,T,Ms}
+    ∇₁₂σ::SymmetricTensor{2,dims,T,Ms}
+    ∇₂₂σ::SymmetricTensor{2,dims,T,Ms}
+    κ ::Tensor{2,dimp,T,Mp}
+    a ::Vec{dimp,T}
+    da::Tensor{2,dimp,T,Mp}
+    λ ::Vec{dimp,T}
+    ζ ::T
+    =#
+
+    σ = extrapolate(y1.σ, y2.σ, x1, x2, x)
+    ∇₁σ = extrapolate(y1.∇₁σ, y2.∇₁σ, x1, x2, x)
+    ∇₂σ = extrapolate(y1.∇₂σ, y2.∇₂σ, x1, x2, x)
+    ∇₁₁σ = extrapolate(y1.∇₁₁σ, y2.∇₁₁σ, x1, x2, x)
+    ∇₂₁σ = extrapolate(y1.∇₂₁σ, y2.∇₂₁σ, x1, x2, x)
+    ∇₁₂σ = extrapolate(y1.∇₁₂σ, y2.∇₁₂σ, x1, x2, x)
+    ∇₂₂σ = extrapolate(y1.∇₂₂σ, y2.∇₂₂σ, x1, x2, x)
+    λ = extrapolate(y1.λ, y2.λ, x1, x2, x) 
+    ζ = extrapolate(y1.ζ, y2.ζ, x1, x2, x) 
+    
+    return StressRecovoryIntegrationValues{dims,dimp,T,Mp,Ms}(σ, ∇₁σ, ∇₂σ, ∇₁₁σ, ∇₂₁σ, ∇₁₂σ, ∇₂₂σ, y1.κ, y1.a, y1.da, λ, ζ)
 end
 
 
@@ -124,6 +174,10 @@ struct CacheStressRecoveryValues{dim_s,T}
     σᶻʸ_layer_bc::Base.RefValue{T}
     ∇σᶻˣ_layer_bc::Base.RefValue{T}
     ∇σᶻʸ_layer_bc::Base.RefValue{T}
+
+    #
+    a::Vector{T}
+    da::Vector{Vec{dim_s,T}}
 end
 
 function CacheStressRecoveryValues{dim_s,T}(nipᴸ_basefuncs::Int, nqp_oop_lay::Int, nlay::Int) where {dim_s,T}
@@ -137,10 +191,14 @@ function CacheStressRecoveryValues{dim_s,T}(nipᴸ_basefuncs::Int, nqp_oop_lay::
     ∫∇σᶻˣ = zeros(T, (nqp_oop_lay+1)*nlay)
     ∫∇σᶻʸ = zeros(T, (nqp_oop_lay+1)*nlay)
 
+    a = zeros(T,dim_s-1)
+    da = zeros(Vec{dim_s,T}, dim_s-1)
+
     return CacheStressRecoveryValues(
         Xᴸ, uᴸ, 
         ∫σᶻˣ, ∫σᶻʸ, ∫σᶻᶻ, ∫∇σᶻˣ, ∫∇σᶻʸ,
-        Ref(T(0.0)),Ref(T(0.0)),Ref(T(0.0)),Ref(T(0.0)))
+        Ref(T(0.0)),Ref(T(0.0)),Ref(T(0.0)),Ref(T(0.0)),
+        a, da)
 end
 
 """
@@ -203,12 +261,12 @@ function recover_cell_stresses(srdata::IGAShellStressRecovory, σ_states::Vector
 
     for ilay in 1:celldata.nlayers
 
-        calculate_integration_values_for_layer!(srdata, σ_states, cv, cv_sr, srdata.ipᴸ, srdata.cvᴸ, celldata, ilay)
+        @timeit "1" calculate_integration_values_for_layer!(srdata, σ_states, cv, cv_sr, srdata.ipᴸ, srdata.cvᴸ, celldata, ilay)
 
-        calculate_stress_recovory_integrals_for_layer!(srdata, ilay, celldata.ic)
+        @timeit "2" calculate_stress_recovory_integrals_for_layer!(srdata, ilay, celldata.ic)
     end
 
-    calculate_recovered_stresses!(srdata, celldata.ic)
+    @timeit "3" calculate_recovered_stresses!(srdata, celldata.ic)
     #Used for sigma_zz, reset for next cell
     srdata.cache.∇σᶻˣ_layer_bc[] = 0.0
     srdata.cache.∇σᶻʸ_layer_bc[] = 0.0
@@ -225,6 +283,29 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
     nqp_oop_lay = srdata.nqp_oop_lay
     integration_values = @view srdata.integration_values[:,:,celldata.ic]
 
+    #Get coords of inplane quadrature points for interpolation of stresses
+    for i in 1:length(srdata.orderingᴸ)
+        Xᴸ_mid[i] = spatial_midsurface_coordinate(cv, srdata.orderingᴸ[i], celldata.Xᵇ)
+    end
+
+    ξ = get_qp_coord(cv_sr, 1) # Always the same inplane coords
+    calculate_stress_recovory_variables!(srdata.cache.a, srdata.cache.da, ipᴸ, Xᴸ_mid, h, zeros(T,length(uᴸ)*dim_s), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
+    a, da = _store_as_tensors(srdata.cache.a, srdata.cache.da)
+
+    # lambda and kappa are both wrong from the lagrange-interpolation
+    # until problem is found, calculate from the following:
+    #g = calculate_g(cv_sr, qp_sr, celldata.ue)
+    #_a = [(sqrt(g[i]⋅g[i])) for i in 1:dim_p]
+    #a = Vec{dim_p,T}(Tuple(_a))
+    #da = zero(Tensor{2,dim_p,T})
+
+    _κ11 = cv_sr.κᵐ[1][1,1]
+    _κ12 = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][1,2]
+    _κ21 = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,1]
+    _κ22 = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,2]
+    κ = Tensor{2,2,T,4}((_κ11,_κ21,_κ12,_κ22))
+    #p, V = eigen(κ, sortby = x -> -abs(x))
+
     for lqp in 1:nqp_oop_lay
         qp_sr = (ilay-1) * nqp_oop_lay + lqp
         
@@ -232,37 +313,12 @@ function calculate_integration_values_for_layer!(srdata::IGAShellStressRecovory{
         ξ = get_qp_coord(cv_sr, qp_sr)
         ζ = ξ[dim_s] 
 
-        #Get coords of inplane quadrature points for interpolation of stresses
+        _λ1 = 1+_κ11*ζ*h/2
+        _λ2 = 1+_κ22*ζ*h/2
+        λ = Vec{2,T}((_λ1,_λ2))
+
         range = collect(get_inplane_qp_range(nqp_oop_lay*srdata.nqp_inp, srdata.nqp_inp, ilay, lqp))
         range = range[srdata.orderingᴸ]
-        for i in 1:length(range)
-            Xᴸ_mid[i] = spatial_midsurface_coordinate(cv, srdata.orderingᴸ[i], celldata.Xᵇ)
-            Xᴸ[i] = spatial_coordinate(cv, range[i], celldata.Xᵇ)
-            uᴸ[i] = function_value(cv, range[i], celldata.ue)
-        end
-
-        xᴸ = Xᴸ + uᴸ 
-
-        _a, _da, _λ, _κ = calculate_stress_recovory_variables(ipᴸ, Xᴸ_mid, h, reinterpret(T,uᴸ), Vec{dim_s,T}((ξ[1:dim_p]..., 0.0)))
-        a, da, λ, κ = _store_as_tensors(_a, _da, _λ, _κ)
-
-        # lambda and kappa are both wrong from the lagrange-interpolation
-        # until problem is found, calculate from the following:
-        #g = calculate_g(cv_sr, qp_sr, celldata.ue)
-        #_a = [(sqrt(g[i]⋅g[i])) for i in 1:dim_p]
-        #a = Vec{dim_p,T}(Tuple(_a))
-        #da = zero(Tensor{2,dim_p,T})
-            _λ = zeros(T,2)
-            _λ[1] = 1+cv_sr.κᵐ[1][1,1]*ζ*h/2
-            _λ[2] = (dim_s == 2) ? 1.0 : 1+cv_sr.κᵐ[1][2,2]*ζ*h/2
-            _κ = zeros(T,2,2)
-            _κ[1,1] = cv_sr.κᵐ[1][1,1]
-            _κ[1,2] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][1,2]
-            _κ[2,1] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,1]
-            _κ[2,2] = (dim_s == 2) ? 0.0 : cv_sr.κᵐ[1][2,2]
-            λ = Vec{2,T}(Tuple(_λ))
-            κ = Tensor{2,2,T,4}(Tuple(_κ))
-            p, V = eigen(κ, sortby = x -> -abs(x))
         
         #Calculate and extract gradients for stress recovory equations
         _σ = function_value(cvᴸ, 1, σ_states, range)
@@ -432,23 +488,20 @@ function calculate_recovered_stresses!(srdata::IGAShellStressRecovory{dim_s,dim_
 end
 
 
-function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{2,T}}, _λ::Vector{T}, _κ::Tensor{2,1}) where {T}
+function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{2,T}}) where T#, _λ::Vector{T}, _κ::Tensor{2,1}) where {T}
     
     a = Vec{2,T}((_a[1], 1.0))
     da = Tensor{2,2}((_da[1][1], _da[1][2], 0.0, 0.0))
 
-    λ = Vec((_λ[1], 1.0))
-    κ = Tensor{2,2}((_κ[1,1], 0.0, 0.0, 0.0))
-
-    return a, da, λ, κ
+    return a, da
 end
 
-function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{3,T}}, _λ::Vector{T}, _κ::Tensor{2,2}) where {T}
+function _store_as_tensors(_a::Vector{T}, _da::Vector{Vec{3,T}}) where T#, _λ::Vector{T}, _κ::Tensor{2,2}) where {T}
     a = Tensor{1,2,T}(Tuple(_a))
     da = Tensor{2,2,T}((_da[1][1], _da[1][2], _da[2][1], _da[2][2]))
-    λ = Vec{2,T}(Tuple(_λ))
+    #λ = Vec{2,T}(Tuple(_λ))
 
-    return a, da, λ, _κ
+    return a, da#, λ, _κ
 end
 
 function _store_as_tensors(_σ::SymmetricTensor, ∇σ::Vector, ∇∇σ::Matrix)
