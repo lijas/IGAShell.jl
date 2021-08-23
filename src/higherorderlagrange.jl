@@ -16,13 +16,13 @@ function generate_1d_lagrange_value(order::Int, i::Int, ξ::Vec{1})
     return _val
 end
 
-function Ferrite.value(ip::MyLagrange{dim,RefCube,order}, _i::Int, ξ::Vec{dim}) where {dim,order}
+function Ferrite.value(ip::MyLagrange{dim,RefCube,order}, _i::Int, ξ::Vec{dim,T})::T where {dim,order,T}
 
     orders = ntuple(_-> order, dim)
     i = _lagrange_ordering(ip)[_i]
     #@warn("Lagrange order")
     i_dim = Tuple(CartesianIndices(orders.+1)[i])
-    _val = 1.0
+    _val = T(1.0)
     for i in 1:dim
         _val *= generate_1d_lagrange_value(order, i_dim[i], Vec(ξ[i]) )
     end
@@ -33,7 +33,7 @@ Ferrite.getnbasefunctions(::MyLagrange{dim,RefCube,order}) where {dim,order} = (
 Ferrite.nvertexdofs(::MyLagrange{dim,RefCube,order}) where {dim,order} = 1
 Ferrite.faces(::MyLagrange{dim,RefCube,order}) where {dim,order} = error("Not implemented")
 
-function _lagrange_ordering(::MyLagrange{1,RefCube,order}) where {order}
+@generated function _lagrange_ordering(::MyLagrange{1,RefCube,order}) where {order}
     dim = 1
     orders = ntuple(_-> order, dim)
 
@@ -54,7 +54,7 @@ function _lagrange_ordering(::MyLagrange{1,RefCube,order}) where {order}
     return ordering
 end
 
-function _lagrange_ordering(::MyLagrange{2,RefCube,order}) where {order}
+@generated function _lagrange_ordering(::MyLagrange{2,RefCube,order}) where {order}
     dim = 2
     orders = ntuple(_-> order, dim)
 
@@ -95,7 +95,7 @@ function _lagrange_ordering(::MyLagrange{2,RefCube,order}) where {order}
 end
 #Numbering:
 #https://blog.kitware.com/wp-content/uploads/2020/03/Implementation-of-rational-Be%CC%81zier-cells-into-VTK-Report.pdf
-function _lagrange_ordering(::MyLagrange{3,RefCube,order}) where {order}
+@generated function _lagrange_ordering(::MyLagrange{3,RefCube,order}) where {order}
     dim = 3
     orders = ntuple(_-> order, dim)
 
