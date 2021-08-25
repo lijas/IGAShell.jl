@@ -544,7 +544,7 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
             
             states = @view interfacestates[:, iint]
 
-            active_dofs = 1:Ferrite.ndofs_per_cell(dh,ic)#active_interface_dofs[iint] #
+            active_dofs = active_interface_dofs[iint] #1:Ferrite.ndofs_per_cell(dh,ic)#
             ndofs_interface = length(active_dofs)
 
             resize!(ue_interface, ndofs_interface)
