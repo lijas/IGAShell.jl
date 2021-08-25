@@ -606,9 +606,12 @@ function _assemble_stiffnessmatrix_and_forcevector!( dh::Ferrite.AbstractDofHand
 end
 
 function Five.post_part!(dh, igashell::IGAShell{dim_p,dim_s,T}, states) where {dim_s, dim_p, T}
-    #if dim_s == 2
-    #    return
-    #end
+    
+    #If the stress enhancement criterion is equal to -1.0, the 
+    # the user does not want to perform stress recovory..
+    if igashell.layerdata.limit_stress_criterion == -1.0
+        return
+    end
 
     for (ic,cellid) in enumerate(igashell.cellset)#enumerate(CellIterator(dh, igashell.cellset))
         
