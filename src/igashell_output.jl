@@ -282,7 +282,8 @@ function Five.collect_output!(output::IGAShellBCOutput, state::StateVariables{T}
     unique!(alldofs)
 
     return (forces        = sum(state.system_arrays.fⁱ[alldofs]),
-            displacements = maxu) # maximum(abs.(state.d[alldofs]))
+            displacements = maxu,# maximum(abs.(state.d[alldofs]))
+            time          = time()) #time for comparing effiency gain between adaptive/non-adaptive
 
 end
 
