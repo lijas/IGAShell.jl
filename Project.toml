@@ -1,7 +1,7 @@
 name = "IgAShell"
 uuid = "a43cd11c-411c-4689-801d-974c732729b2"
 authors = ["lijas <elias.borjesson@hotmail.com>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 Ferrite = "c061ca5d-56c9-439f-9c0e-210fe06d3992"
