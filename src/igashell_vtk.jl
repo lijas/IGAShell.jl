@@ -98,7 +98,7 @@ function _init_vtk_cell!(igashell::IGAShell{dim_p,dim_s}, cls, node_coords, cv, 
 
             #Shell layer
             VTK_CELL = (dim_s==2) ? Ferrite.VTKCellTypes.VTK_QUAD : Ferrite.VTKCellTypes.VTK_HEXAHEDRON
-            nodeids = (dim_s==2) ? nodeids[[1,2,4,3]] : nodeids[[1,2,4,3,5,6,8,7]]
+            nodeids = (dim_s==2) ? nodeids[[1,2,4,3]] : nodeids[[1,2,3,4,5,6,7,8]]
             push!(cls, MeshCell(VTK_CELL, nodeids .+ node_offset .+ (ilay-1)*n_plot_points))
 
         end 
